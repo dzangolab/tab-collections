@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     main { max-width: 560px; padding: 22px; }
-    h1 { font-size: 18px; margin-bottom: 6px; }
+    #root > h2:first-child { font-size: 18px; margin: 0 0 6px; }
     ul.changes { list-style: none; padding: 0; margin: 6px 0 14px; }
     ul.changes li { padding: 4px 0; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     ul.changes li:last-child { border-bottom: 0; }
@@ -22,7 +22,13 @@
   </style>
 </head>
 <body>
-<main id="root"></main>
+<main>
+  <header class="appbar">
+    <img src="icons/icon128.png" alt="">
+    <h1>Tab Collections</h1>
+  </header>
+  <div id="root"></div>
+</main>
 <script type="module" src="prompt.js"></script>
 </body>
 </html>
