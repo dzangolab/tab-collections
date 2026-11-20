@@ -76,6 +76,8 @@ textarea { min-height: 80px; resize: vertical; }
 input:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); border-color: var(--accent); }
 
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.settings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; }
+select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--text); }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }

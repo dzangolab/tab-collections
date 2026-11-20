@@ -4,6 +4,7 @@
 //   sessions:    { [windowId]: { collectionId, baseline: [url], initial: {tabId: index}, tabs: [{url, title}], openedAt } }
 //   pending:     { [id]: { id, collectionId, collectionName, pages: [{url, title}], closedAt, promptWindowId } }
 //                (only while its "Update collection?" prompt is open)
+//   settings:    { closeDefault: 'keep' | 'update' }
 
 // Cross-browser API handle: Firefox and Safari expose `browser`, Chromium exposes `chrome`.
 // All of them return promises in Manifest V3.
@@ -163,6 +164,21 @@ export async function openReview(id) {
     // Some browsers (e.g. Safari) don't support popup-type windows.
     return api.windows.create({ url, focused: true });
   }
+}
+
+// ---------- Settings ----------
+
+// closeDefault: the prompt button focused and highlighted when a drifted window closes.
+export const SETTINGS_DEFAULTS = { closeDefault: 'keep' };
+
+export async function getSettings() {
+  return { ...SETTINGS_DEFAULTS, ...(await getAll('settings', {})) };
+}
+
+export async function saveSetting(key, value) {
+  const settings = await getAll('settings', {});
+  settings[key] = value;
+  await STORE.set({ settings });
 }
 
 // ---------- Backup / sharing ----------

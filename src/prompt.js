@@ -1,5 +1,5 @@
 import {
-  api, getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural, send,
+  api, getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural, send, getSettings,
 } from './common.js';
 
 const root = document.getElementById('root');
@@ -48,6 +48,10 @@ async function init() {
   // Compare against the URLs the saved pages actually resolved to (after redirects) when opened.
   const before = col.pages.map((p, i) => ({ ...p, url: pending.baseline?.[i] || p.url }));
   const { added, removed, reordered } = diffPages(before, pending.pages);
+  // The setting decides which button is focused and highlighted; the other gets the plain style.
+  const updateByDefault = (await getSettings()).closeDefault === 'update';
+  const updateButton = el('button', { class: updateByDefault && 'primary', onclick: () => update(col) }, 'Update');
+  const keepButton = el('button', { class: !updateByDefault && 'primary', onclick: discard }, 'Keep unchanged');
   document.title = `Update “${col.name}”?`;
   root.replaceChildren(...[
     el('h1', {}, `Update “${col.name}”?`),
@@ -61,8 +65,8 @@ async function init() {
       el('summary', {}, `Tabs in the ${pending.live ? 'open' : 'closed'} window (${pending.pages.length})`),
       el('ul', { class: 'changes' }, ...pending.pages.map((p) => pageLine(p, '', '•')))),
     el('div', { class: 'buttons' },
-      el('button', { class: 'primary', onclick: () => update(col) }, 'Update'),
-      el('button', { onclick: discard }, 'Keep unchanged'),
+      updateButton,
+      keepButton,
     ),
     el('h2', {}, 'Save as a new collection'),
     el('form', {
@@ -75,6 +79,7 @@ async function init() {
     el('input', { type: 'text', name: 'name', placeholder: `${col.name} (copy)` }),
     el('button', { type: 'submit', class: 'primary' }, 'Save')),
   ].filter(Boolean));
+  (updateByDefault ? updateButton : keepButton).focus();
 
   async function update(c) {
     busy = true;
