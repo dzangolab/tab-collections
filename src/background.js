@@ -2,7 +2,7 @@
 // those windows, and asks the user what to do when a changed window is closed.
 
 import {
-  api, getAll, getCollection, putCollection, makeCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
+  api, getAll, getCollection, putCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
 } from './common.js';
 
 const SETTLE_WINDOW_MS = 60_000; // redirects within this time after opening are not "changes"
@@ -127,10 +127,12 @@ api.windows.onRemoved.addListener(async (windowId) => {
     if (found) delete ss[windowId];
     return found;
   });
-  if (s) await reviewClosedSession(s);
+  if (s) await reviewSession(s, { windowId });
 });
 
-async function reviewClosedSession(s) {
+// Opens the "Update collection?" prompt when a session's tabs differ from its collection.
+// `live` means the window is still open: the user asked from the toolbar popup.
+async function reviewSession(s, { live = false, windowId = null } = {}) {
   const col = await getCollection(s.collectionId);
   if (!col) return; // collection was deleted while open
 
@@ -139,9 +141,14 @@ async function reviewClosedSession(s) {
 
   const id = newId();
   await withPending((p) => {
+    // A newer prompt for the same window replaces an unanswered earlier one.
+    if (windowId != null) {
+      for (const [k, v] of Object.entries(p)) if (v.windowId === windowId) delete p[k];
+    }
     p[id] = {
       id, collectionId: col.id, collectionName: col.name, pages: nowPages, closedAt: Date.now(),
       baseline: (s.baseline || []).length === col.pages.length ? s.baseline : null,
+      live, windowId,
     };
   });
   try { await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
@@ -155,7 +162,7 @@ function hasChanged(s, col, nowPages) {
   return !sameUrlList(nowUrls, baseUrls) && !sameUrlList(nowUrls, colUrls);
 }
 
-// ---------- Saving a collection window that is still open ----------
+// ---------- Collection windows that are still open ----------
 
 // The collection a window was opened from, its current tabs, and whether they changed.
 async function windowState(windowId) {
@@ -167,18 +174,12 @@ async function windowState(windowId) {
   return { col, pages, changed: hasChanged(s, col, pages) };
 }
 
-// Saves the window's tabs into its collection, or into a new collection when `newName` is given.
-// The window then stays tracked against what was saved, so closing it only asks about later changes.
-async function saveWindow(windowId, newName = null) {
-  const state = await windowState(windowId);
-  if (!state) throw new Error('This window is not a collection');
-  const pages = state.pages.map((p) => ({ url: p.url, title: p.title }));
-  const col = newName == null
-    ? { ...state.col, pages }
-    : makeCollection({ name: newName || `${state.col.name} (copy)`, pages });
-  await putCollection(col);
-  await adoptWindow(windowId, col.id, pages.map((p) => p.url)); // the tab URLs, before any normalizing
-  return col.id;
+// The toolbar popup's button: the same prompt as closing the window, while it stays open.
+async function reviewWindow(windowId) {
+  await refresh(windowId);
+  const s = (await getAll('sessions', {}))[windowId];
+  if (!s) throw new Error('This window is not a collection');
+  await reviewSession(s, { live: true, windowId });
 }
 
 // After a browser restart, window ids are reused, so every tracked window is gone.
@@ -188,7 +189,7 @@ api.runtime.onStartup.addListener(async () => {
     for (const k of Object.keys(ss)) delete ss[k];
     return vals;
   });
-  for (const s of old) await reviewClosedSession(s);
+  for (const s of old) await reviewSession(s);
   updateBadge();
 });
 
@@ -201,7 +202,7 @@ api.runtime.onInstalled.addListener(async () => {
     }
     return out;
   });
-  for (const s of stale) await reviewClosedSession(s);
+  for (const s of stale) await reviewSession(s);
   updateBadge();
 });
 
@@ -222,13 +223,13 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case 'open': return openCollection(msg.id);
-      case 'adopt': return adoptWindow(msg.windowId, msg.collectionId);
+      case 'adopt': return adoptWindow(msg.windowId, msg.collectionId, msg.baseline);
       case 'saveAndAdopt': {
         await putCollection(msg.collection);
         await adoptWindow(msg.windowId, msg.collection.id);
         return msg.collection.id;
       }
-      case 'saveWindow': return saveWindow(msg.windowId, msg.newName);
+      case 'reviewWindow': return reviewWindow(msg.windowId);
       case 'windowStatus': {
         const state = await windowState(msg.windowId);
         return state && { changed: state.changed, name: state.col.name };

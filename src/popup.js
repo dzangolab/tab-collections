@@ -56,7 +56,6 @@ async function init() {
   }
 
   if (current && cols[current.collectionId]) {
-    // A window opened from a collection: update that collection, or save the tabs as a new one.
     $('current').hidden = true;
     $('saveForm').hidden = true;
     await showCollectionWindow(win.id);
@@ -82,6 +81,8 @@ async function init() {
   });
 }
 
+// A window opened from a collection: when its tabs have changed, a button opens the same
+// "Update collection?" prompt as closing the window.
 async function showCollectionWindow(windowId) {
   $('collectionSection').hidden = false;
   let status;
@@ -89,32 +90,23 @@ async function showCollectionWindow(windowId) {
     status = await send({ type: 'windowStatus', windowId });
   } catch (e) {
     $('collectionMsg').textContent = `Could not check this window: ${e.message}`;
-    $('saveAsForm').querySelector('button').disabled = true;
     return;
   }
   if (!status) {
     $('collectionMsg').textContent = 'This window is no longer linked to its collection.';
-    $('saveAsForm').querySelector('button').disabled = true;
     return;
   }
   $('collectionMsg').textContent = status.changed
-    ? `The contents of the “${status.name}” window have changed. Do you want to update the collection?`
+    ? `The tabs in this window differ from the collection “${status.name}”.`
     : `This window is the collection “${status.name}”.`;
-  $('updateCollection').hidden = !status.changed;
-  $('saveAsName').placeholder = `${status.name} (copy)`;
-
-  const save = async (newName) => {
+  $('saveChanges').hidden = !status.changed;
+  $('saveChanges').addEventListener('click', async () => {
     try {
-      await send({ type: 'saveWindow', windowId, newName });
+      await send({ type: 'reviewWindow', windowId });
       window.close();
     } catch (e) {
       $('collectionMsg').textContent = e.message;
     }
-  };
-  $('updateCollection').addEventListener('click', () => save(null));
-  $('saveAsForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    save($('saveAsName').value.trim());
   });
 }
 
