@@ -48,9 +48,9 @@ async function init() {
   // Compare against the URLs the saved pages actually resolved to (after redirects) when opened.
   const before = col.pages.map((p, i) => ({ ...p, url: pending.baseline?.[i] || p.url }));
   const { added, removed, reordered } = diffPages(before, pending.pages);
-  document.title = `Update “${col.name}”?`;
+  document.title = `Update “${col.name}” collection`;
   root.replaceChildren(...[
-    el('h1', {}, `Update “${col.name}”?`),
+    el('h1', {}, `Update “${col.name}” collection`),
     el('p', {}, `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
     !!added.length && el('h2', {}, `${plural(added.length, 'page')} added`),
     !!added.length && el('ul', { class: 'changes' }, ...added.map((p) => pageLine(p, 'add', '+'))),
