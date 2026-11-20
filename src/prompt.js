@@ -61,7 +61,7 @@ async function init() {
       el('summary', {}, `Tabs in the ${pending.live ? 'open' : 'closed'} window (${pending.pages.length})`),
       el('ul', { class: 'changes' }, ...pending.pages.map((p) => pageLine(p, '', '•')))),
     el('div', { class: 'buttons' },
-      el('button', { class: 'primary', onclick: () => update(col) }, 'Save'),
+      el('button', { class: 'primary', onclick: () => update(col) }, 'Update'),
       el('button', { onclick: discard }, 'Keep unchanged'),
     ),
     el('h2', {}, 'Save as a new collection'),
