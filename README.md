@@ -54,9 +54,9 @@ node build.mjs safari   # or a single target: chromium | firefox | safari
 
 ## Vivaldi workspaces
 - **Collections page → From Vivaldi workspaces…** lists the workspaces that have open tabs. Tick the ones you want, name each one, then click **Create collections**.
-- **Toolbar popup** in Vivaldi: **Save** captures only the current workspace's tabs (not every tab in the window).
+- **Toolbar popup** in Vivaldi: **Save** captures only the current workspace's tabs (not every tab in the window), when Vivaldi exposes the workspace field described below.
 - Vivaldi has no official workspaces API. This uses a hidden per-tab field (`vivExtData.workspaceId`) that Vivaldi has exposed in many versions. Workspace names aren't available, so each collection gets a suggested name (its main sites) that you can edit.
-- If your Vivaldi version doesn't expose that field, the button stays hidden. Instead, open the workspace, select its tabs (click the first tab, Shift-click the last), then use the popup's **Save**. It saves just the selected tabs. This works in every browser.
+- If your Vivaldi version doesn't expose that field, the button stays hidden, and extensions can't tell which workspace a tab is in. The popup's **Save** then covers the tabs of every workspace in the window, and its tab count includes them all (for example, "Save this window's 44 tabs" when the current workspace shows only 3). To save one workspace, open it, select its tabs (click the first tab, Shift-click the last), then use the popup's **Save**. It saves just the selected tabs. This works in every browser.
 
 ## Using it
 - **Toolbar popup:** open a collection, go to *Manage*, or save tabs as a collection: the selected tabs if you've selected several, otherwise the whole window.
