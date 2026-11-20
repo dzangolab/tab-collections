@@ -16,19 +16,42 @@ async function init() {
   $('list').replaceChildren(
     ...(list.length
       ? list.map((c) =>
-          el('button', {
+          el('div', {
             class: 'item',
             title: c.description || c.name,
-            onclick: async () => {
-              try { await send({ type: 'open', id: c.id }); window.close(); } catch (e) { alert(e.message); }
-            },
+            onclick: () => openCollection(c.id),
           },
-          el('span', { class: 'mark' }, c.id === current?.collectionId ? '*' : ''),
-          el('span', { class: 'nm' }, c.name),
-          openIds.has(c.id) && el('span', { class: 'pill' }, 'Open'),
+          el('button', { class: 'main' },
+            el('span', { class: 'mark' }, c.id === current?.collectionId ? '*' : ''),
+            el('span', { class: 'nm' }, c.name)),
+          el('label', { class: 'switch', title: openIds.has(c.id) ? 'Close the window' : 'Open in a window', onclick: (e) => e.stopPropagation() },
+            el('input', {
+              type: 'checkbox',
+              role: 'switch',
+              checked: openIds.has(c.id),
+              'aria-label': `“${c.name}” window`,
+              onchange: (e) => toggleWindow(c.id, e.target),
+            }),
+            el('span', { class: 'slider' })),
           el('span', { class: 'n' }, c.pages.length)))
       : [el('div', { class: 'muted small', style: 'padding: 8px 12px' }, 'No collections yet.')]),
   );
+
+  async function openCollection(id) {
+    try { await send({ type: 'open', id }); window.close(); } catch (e) { alert(e.message); }
+  }
+
+  // The toggle opens the collection's window, or closes it.
+  async function toggleWindow(id, input) {
+    if (input.checked) return openCollection(id);
+    try {
+      const windowIds = Object.entries(sessions).filter(([, s]) => s.collectionId === id).map(([w]) => Number(w));
+      await Promise.all(windowIds.map((w) => api.windows.remove(w)));
+    } catch (e) {
+      input.checked = true;
+      alert(e.message);
+    }
+  }
 
   const nPending = Object.keys(pending).length;
   $('pending').replaceChildren(
