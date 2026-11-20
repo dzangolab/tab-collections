@@ -2,7 +2,7 @@
 // those windows, and asks the user what to do when a changed window is closed.
 
 import {
-  api, getAll, getCollection, putCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
+  api, getAll, getCollection, putCollection, makeCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
 } from './common.js';
 
 const SETTLE_WINDOW_MS = 60_000; // redirects within this time after opening are not "changes"
@@ -66,8 +66,8 @@ async function openCollection(id) {
 }
 
 // Start tracking an existing window as a collection (used by "Save this window", and after saving
-// an open window's changes). `baseline` is the list of URLs that counts as unchanged; it defaults
-// to the window's current tabs.
+// an open window's tabs). `baseline` is the list of URLs that counts as unchanged; it defaults to
+// the window's current tabs.
 async function adoptWindow(windowId, collectionId, baseline = null) {
   await withSessions(async (ss) => {
     for (const [w, s] of Object.entries(ss)) if (s.collectionId === collectionId) delete ss[w];
@@ -127,44 +127,58 @@ api.windows.onRemoved.addListener(async (windowId) => {
     if (found) delete ss[windowId];
     return found;
   });
-  if (s) await reviewSession(s, { windowId });
+  if (s) await reviewClosedSession(s);
 });
 
-// Compares a session's tabs with its collection and, when they differ, opens the review prompt.
-// `live` means the window is still open (the user asked to save its changes).
-// Returns 'missing', 'unchanged' or 'review'.
-async function reviewSession(s, { live = false, windowId = null } = {}) {
+async function reviewClosedSession(s) {
   const col = await getCollection(s.collectionId);
-  if (!col) return 'missing'; // collection was deleted while open
+  if (!col) return; // collection was deleted while open
 
   const nowPages = cleanPages(s.tabs || []);
-  const nowUrls = nowPages.map((p) => p.url);
-  const baseUrls = (s.baseline || []).filter((u) => !isIgnorableUrl(u));
-  const colUrls = col.pages.map((p) => p.url).filter((u) => !isIgnorableUrl(u));
-  if (sameUrlList(nowUrls, baseUrls) || sameUrlList(nowUrls, colUrls)) return 'unchanged';
+  if (!hasChanged(s, col, nowPages)) return;
 
   const id = newId();
   await withPending((p) => {
-    // A newer review of the same window replaces any earlier one from it that is still open.
-    if (windowId != null) {
-      for (const [k, v] of Object.entries(p)) if (v.windowId === windowId) delete p[k];
-    }
     p[id] = {
       id, collectionId: col.id, collectionName: col.name, pages: nowPages, closedAt: Date.now(),
       baseline: (s.baseline || []).length === col.pages.length ? s.baseline : null,
-      live, windowId,
     };
   });
   try { await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
-  return 'review';
 }
 
-// "Save changes" for a window that is still open.
-async function reviewWindow(windowId) {
+// Whether a window's tabs differ from both the URLs it opened with and the saved collection.
+function hasChanged(s, col, nowPages) {
+  const nowUrls = nowPages.map((p) => p.url);
+  const baseUrls = (s.baseline || []).filter((u) => !isIgnorableUrl(u));
+  const colUrls = col.pages.map((p) => p.url).filter((u) => !isIgnorableUrl(u));
+  return !sameUrlList(nowUrls, baseUrls) && !sameUrlList(nowUrls, colUrls);
+}
+
+// ---------- Saving a collection window that is still open ----------
+
+// The collection a window was opened from, its current tabs, and whether they changed.
+async function windowState(windowId) {
   await refresh(windowId);
   const s = (await getAll('sessions', {}))[windowId];
-  if (!s) throw new Error('This window is not a collection');
-  return reviewSession(s, { live: true, windowId });
+  const col = s && await getCollection(s.collectionId);
+  if (!col) return null;
+  const pages = cleanPages(s.tabs || []);
+  return { col, pages, changed: hasChanged(s, col, pages) };
+}
+
+// Saves the window's tabs into its collection, or into a new collection when `newName` is given.
+// The window then stays tracked against what was saved, so closing it only asks about later changes.
+async function saveWindow(windowId, newName = null) {
+  const state = await windowState(windowId);
+  if (!state) throw new Error('This window is not a collection');
+  const pages = state.pages.map((p) => ({ url: p.url, title: p.title }));
+  const col = newName == null
+    ? { ...state.col, pages }
+    : makeCollection({ name: newName || `${state.col.name} (copy)`, pages });
+  await putCollection(col);
+  await adoptWindow(windowId, col.id, pages.map((p) => p.url)); // the tab URLs, before any normalizing
+  return col.id;
 }
 
 // After a browser restart, window ids are reused, so every tracked window is gone.
@@ -174,7 +188,7 @@ api.runtime.onStartup.addListener(async () => {
     for (const k of Object.keys(ss)) delete ss[k];
     return vals;
   });
-  for (const s of old) await reviewSession(s);
+  for (const s of old) await reviewClosedSession(s);
   updateBadge();
 });
 
@@ -187,7 +201,7 @@ api.runtime.onInstalled.addListener(async () => {
     }
     return out;
   });
-  for (const s of stale) await reviewSession(s);
+  for (const s of stale) await reviewClosedSession(s);
   updateBadge();
 });
 
@@ -208,12 +222,16 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case 'open': return openCollection(msg.id);
-      case 'adopt': return adoptWindow(msg.windowId, msg.collectionId, msg.baseline);
-      case 'reviewWindow': return reviewWindow(msg.windowId);
+      case 'adopt': return adoptWindow(msg.windowId, msg.collectionId);
       case 'saveAndAdopt': {
         await putCollection(msg.collection);
         await adoptWindow(msg.windowId, msg.collection.id);
         return msg.collection.id;
+      }
+      case 'saveWindow': return saveWindow(msg.windowId, msg.newName);
+      case 'windowStatus': {
+        const state = await windowState(msg.windowId);
+        return state && { changed: state.changed, name: state.col.name };
       }
       default: throw new Error(`Unknown message: ${msg?.type}`);
     }

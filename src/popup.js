@@ -55,24 +55,11 @@ async function init() {
     }));
   }
 
-  // A window opened from a collection can save its tab changes, with the same prompt as closing it.
   if (current && cols[current.collectionId]) {
-    $('changesRow').hidden = false;
-    $('saveChanges').addEventListener('click', async () => {
-      $('changesMsg').textContent = '';
-      try {
-        const result = await send({ type: 'reviewWindow', windowId: win.id });
-        if (result === 'review') window.close();
-        else $('changesMsg').textContent = 'No changes to save.';
-      } catch (e) {
-        $('changesMsg').textContent = e.message;
-      }
-    });
-  }
-
-  if (mode === 'window' && current && cols[current.collectionId]) {
-    $('current').textContent = `This window is the collection “${cols[current.collectionId].name}”.`;
+    // A window opened from a collection: update that collection, or save the tabs as a new one.
+    $('current').hidden = true;
     $('saveForm').hidden = true;
+    await showCollectionWindow(win.id);
   } else {
     const what = { window: "this window's", selected: 'the selected', workspace: "this workspace's" }[mode];
     $('current').textContent = `Save ${what} ${plural(pages.length, 'tab')} as a new collection:`;
@@ -92,6 +79,31 @@ async function init() {
     }
     await api.tabs.create({ url: api.runtime.getURL(`collection.html?id=${encodeURIComponent(col.id)}`), windowId: win.id });
     window.close();
+  });
+}
+
+async function showCollectionWindow(windowId) {
+  const status = await send({ type: 'windowStatus', windowId });
+  if (!status) return;
+  $('collectionSection').hidden = false;
+  $('collectionMsg').textContent = status.changed
+    ? `The contents of the “${status.name}” window have changed. Do you want to update the collection?`
+    : `This window is the collection “${status.name}”.`;
+  $('updateCollection').hidden = !status.changed;
+  $('saveAsName').placeholder = `${status.name} (copy)`;
+
+  const save = async (newName) => {
+    try {
+      await send({ type: 'saveWindow', windowId, newName });
+      window.close();
+    } catch (e) {
+      $('collectionMsg').textContent = e.message;
+    }
+  };
+  $('updateCollection').addEventListener('click', () => save(null));
+  $('saveAsForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    save($('saveAsName').value.trim());
   });
 }
 
