@@ -142,9 +142,10 @@ async function showCollectionWindow(windowId) {
     $('collectionMsg').textContent = 'This window is no longer linked to its collection.';
     return;
   }
-  $('collectionMsg').textContent = status.changed
-    ? `The tabs in this window differ from the collection “${status.name}”.`
-    : `This window is the collection “${status.name}”.`;
+  const name = el('strong', {}, status.name);
+  $('collectionMsg').replaceChildren(...(status.changed
+    ? ['The tabs in this window differ from the ', name, ' collection.']
+    : ['This window displays the ', name, ' collection.']));
   $('saveChanges').hidden = !status.changed;
   $('saveChanges').addEventListener('click', async () => {
     try {
