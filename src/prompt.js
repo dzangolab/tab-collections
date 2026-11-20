@@ -26,7 +26,7 @@ function pageLine(p, cls, sign) {
 async function init() {
   const pending = (await getPending())[id];
   if (!pending) {
-    root.replaceChildren(el('h1', {}, 'Nothing to review'),
+    root.replaceChildren(el('h2', {}, 'Nothing to review'),
       el('p', { class: 'muted' }, 'This change was already handled.'),
       el('button', { onclick: closeSelf }, 'Close'));
     return;
@@ -36,7 +36,7 @@ async function init() {
   const col = await getCollection(pending.collectionId);
   if (!col) {
     root.replaceChildren(
-      el('h1', {}, `“${pending.collectionName}” no longer exists`),
+      el('h2', {}, `“${pending.collectionName}” no longer exists`),
       el('p', { class: 'muted' }, `${theWindowHad} ${plural(pending.pages.length, 'tab')}. Save them as a new collection?`),
       el('div', { class: 'buttons' },
         el('button', { class: 'primary', onclick: () => saveAsNew(pending.collectionName, '') }, 'Save as new collection'),
@@ -54,7 +54,7 @@ async function init() {
   const keepButton = el('button', { class: !updateByDefault && 'primary', onclick: discard }, 'Keep unchanged');
   document.title = `Update “${col.name}” collection`;
   root.replaceChildren(...[
-    el('h1', {}, `Update “${col.name}” collection`),
+    el('h2', {}, `Update “${col.name}” collection`),
     el('p', {}, `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
     !!added.length && el('h2', {}, `${plural(added.length, 'page')} added`),
     !!added.length && el('ul', { class: 'changes' }, ...added.map((p) => pageLine(p, 'add', '+'))),

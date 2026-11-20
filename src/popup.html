@@ -7,7 +7,9 @@
     body { width: 320px; }
     .wrap { padding: 12px; }
     .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .head h1 { font-size: 15px; }
+    .head .appbar { margin: 0; gap: 8px; }
+    .head .appbar img { width: 20px; height: 20px; }
+    .head .appbar h1 { font-size: 15px; }
     .list { max-height: 320px; overflow: auto; margin: 0 -12px; }
     .item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 0; padding: 8px 12px; background: transparent; cursor: pointer; }
     .item:hover { background: var(--hover); }
@@ -36,7 +38,10 @@
 <body>
 <div class="wrap">
   <div class="head">
-    <h1>Collections</h1>
+    <div class="appbar">
+      <img src="icons/icon128.png" alt="">
+      <h1>Tab Collections</h1>
+    </div>
     <a href="#" id="manage">Manage</a>
   </div>
   <div class="list" id="list"></div>
