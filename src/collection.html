@@ -7,19 +7,15 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<main>
-  <header class="appbar">
+<header class="topnav">
+  <div class="topnav-inner">
     <img src="icons/icon128.png" alt="">
     <h1>Tab Collections</h1>
-  </header>
-  <div class="topbar">
-    <a href="collections.html">← All collections</a>
     <div class="spacer"></div>
-    <button id="exportOne">Export</button>
-    <button id="delete" class="danger">Delete</button>
-    <button id="open" class="primary">Open collection</button>
+    <a class="back" href="collections.html" id="back">All collections</a>
   </div>
-
+</header>
+<main class="narrow">
   <div id="notFound" class="panel empty" hidden>
     This collection no longer exists. <a href="collections.html">Back to all collections</a>
   </div>
@@ -30,38 +26,46 @@
       <a href="#" id="reload">Discard my edits and reload</a>
     </div>
 
-    <div class="field">
-      <label for="name">Name</label>
-      <input type="text" id="name" maxlength="200">
+    <div class="doc-head">
+      <h2 id="title"></h2>
+      <div class="toolbar">
+        <button class="icon-btn" id="editToggle" aria-pressed="false" aria-controls="details" aria-label="Edit name and description" title="Edit name and description"></button>
+        <button class="icon-btn" id="exportOne" aria-label="Export" title="Export"></button>
+        <button id="open" class="primary">Open collection</button>
+      </div>
     </div>
-    <div class="field">
-      <label for="description">Description</label>
-      <textarea id="description" placeholder="What is this collection for?"></textarea>
+    <p class="doc-desc" id="descText"></p>
+    <section class="panel details" id="details" hidden>
+      <h3>Details</h3>
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" maxlength="200">
+      </div>
+      <div class="field">
+        <label for="description">Description</label>
+        <textarea id="description" placeholder="What is this collection for?"></textarea>
+      </div>
+    </section>
+    <div class="doc-meta">
+      <p id="dates"></p>
+      <button class="icon-btn ghost danger" id="delete" aria-label="Delete collection" title="Delete collection"></button>
     </div>
 
-    <h2>Web pages <span id="count" class="muted small"></span></h2>
-    <div class="panel">
-      <table class="pages">
-        <thead>
-          <tr><th></th><th></th><th>Title</th><th>URL</th><th></th></tr>
-        </thead>
-        <tbody id="pages"></tbody>
-      </table>
-      <div id="noPages" class="empty" hidden>No pages yet — add one below.</div>
-      <form class="addrow" id="addForm">
-        <input type="text" class="url" id="addUrl" placeholder="https://example.com" required>
-        <input type="text" class="title" id="addTitle" placeholder="Title (optional)">
-        <button type="submit">Add page</button>
-      </form>
-    </div>
-
-    <div class="savebar">
-      <span class="status" id="status">All changes saved</span>
-      <button id="revert" disabled>Revert</button>
-      <button id="save" class="primary" disabled>Save</button>
-    </div>
+    <h2 class="section-label" id="count"></h2>
+    <div class="page-list" id="pages"></div>
+    <div id="noPages" class="panel empty" hidden>No pages yet — add one below.</div>
+    <form class="addcard" id="addForm">
+      <input type="text" class="url" id="addUrl" placeholder="Add a page: https://example.com" aria-label="New page URL" required>
+      <input type="text" class="title" id="addTitle" placeholder="Title (optional)" aria-label="New page title">
+      <button type="submit">Add page</button>
+    </form>
   </div>
 </main>
+<div class="savepill" id="savebar" role="status" hidden>
+  <span class="status" id="status">Unsaved changes</span>
+  <button class="revert" id="revert">Revert</button>
+  <button id="save" class="primary">Save</button>
+</div>
 <div class="toast" id="toast"></div>
 <script type="module" src="collection.js"></script>
 </body>

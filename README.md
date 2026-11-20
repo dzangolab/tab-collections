@@ -17,8 +17,8 @@ Until then, install it from code: see [Installing locally from code](#installing
 
 ## Using it
 - **Toolbar popup:** open a collection, go to *Manage*, or save tabs as a collection: the selected tabs if you've selected several, otherwise the whole window.
-- **Collections page:** a table of collections with description and page count; create, open, delete, import, export.
-- **Collection page:** edit the name, description and pages (add, remove, reorder, edit), then Save (Ctrl/Cmd+S).
+- **Collections page:** one card per collection with its name, description and page count; the current window's collection is highlighted. A toggle opens or closes the collection's window. Create, delete, import, export.
+- **Collection page:** the pencil button edits the name and description; edit each page's title and URL in place, add and remove pages, and drag the handle (or use the arrow keys on it) to reorder. Then Save (Ctrl/Cmd+S).
 - **Open a collection:** a new window with one tab per page. If it's already open, that window is focused instead.
 - **Close the window:** if the tabs changed, you're asked to **Update**, **Keep unchanged**, or **Save as new**. Redirects during the first page load and empty new-tab pages don't count as changes. Closing the prompt without choosing, or switching to another window (which closes it), counts as **Keep unchanged**, and so does a window that closes without a prompt, such as when the browser quits.
 - **Settings** (on the Collections page, also the extension's Options page): *Default behaviour when closing a window which has drifted from its collection* picks which prompt button is focused and highlighted, **Update** or **Keep unchanged** (the default).

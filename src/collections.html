@@ -7,15 +7,17 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<main>
-  <header class="appbar">
+<header class="topnav">
+  <div class="topnav-inner">
     <img src="icons/icon128.png" alt="">
     <h1>Tab Collections</h1>
-  </header>
+  </div>
+</header>
+<main class="narrow">
   <div class="topbar">
     <h2>Collections</h2>
     <div class="spacer"></div>
-    <input type="search" id="filter" placeholder="Filter…" style="width: 200px">
+    <input type="search" id="filter" placeholder="Filter…" aria-label="Filter collections" style="width: 200px">
     <button id="vivaldi" hidden>From Vivaldi workspaces…</button>
     <button id="import">Import…</button>
     <button id="export">Export</button>
@@ -23,24 +25,13 @@
     <input type="file" id="importFile" accept=".json,application/json" hidden>
   </div>
 
-
-  <div class="panel">
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th class="num">Pages</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div id="empty" class="empty" hidden>
-      No collections yet. Create one, or open the toolbar popup in any window and choose
-      “Save this window as a collection”.
-    </div>
+  <div class="cards" id="cards"></div>
+  <p class="muted" id="noMatch" hidden>No collections match the filter.</p>
+  <div id="empty" class="panel empty" hidden>
+    No collections yet. Create one, or open the toolbar popup in any window and choose
+    “Save this window as a collection”.
   </div>
+
   <h2>Settings</h2>
   <div class="panel settings">
     <label for="closeDefault">Default behaviour when closing a window which has drifted from its collection</label>

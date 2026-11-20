@@ -1,9 +1,9 @@
 import {
   api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll,
-  buildExport, parseImport, downloadJson, el, send, plural, getSettings, saveSetting,
+  buildExport, parseImport, downloadJson, el, icon, send, plural, getSettings, saveSetting,
 } from './common.js';
 
-const rows = document.getElementById('rows');
+const cards = document.getElementById('cards');
 const empty = document.getElementById('empty');
 const filter = document.getElementById('filter');
 const toastEl = document.getElementById('toast');
@@ -15,44 +15,64 @@ function toast(msg) {
   toast.t = setTimeout(() => toastEl.classList.remove('show'), 2200);
 }
 
+// The window this page is in, to mark the collection it holds as "This window".
+const thisWindow = api.tabs.getCurrent().then((t) => t?.windowId).catch(() => null);
+
 async function render() {
-  const [cols, sessions] = await Promise.all([getCollections(), getAll('sessions', {})]);
-  const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
+  const [cols, sessions, windowId] = await Promise.all([getCollections(), getAll('sessions', {}), thisWindow]);
+  const windowsOf = (id) => Object.entries(sessions).filter(([, s]) => s.collectionId === id).map(([w]) => Number(w));
+  const currentId = sessions[windowId]?.collectionId;
   const q = filter.value.trim().toLowerCase();
   const all = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
   const list = q ? all.filter((c) => (c.name + ' ' + c.description).toLowerCase().includes(q)) : all;
 
-  rows.replaceChildren(
-    ...list.map((c) =>
-      el('tr', { class: 'clickable', onclick: () => (location.href = `collection.html?id=${encodeURIComponent(c.id)}`) },
-        el('td', { class: 'name' }, c.name, openIds.has(c.id) && el('span', { class: 'pill' }, 'Open')),
-        el('td', { class: 'desc', title: c.description }, c.description || '—'),
-        el('td', { class: 'num' }, c.pages.length),
-        el('td', { class: 'actions' },
-          el('button', {
-            class: 'primary',
-            onclick: async (e) => {
-              e.stopPropagation();
-              try { await send({ type: 'open', id: c.id }); } catch (err) { toast(err.message); }
-            },
-          }, openIds.has(c.id) ? 'Show' : 'Open'),
-          el('button', {
-            class: 'danger',
-            onclick: async (e) => {
-              e.stopPropagation();
-              if (confirm(`Delete the collection “${c.name}”? This cannot be undone.`)) {
-                await removeCollection(c.id);
-                toast('Collection deleted');
-              }
-            },
-          }, 'Delete'),
-        ),
+  cards.replaceChildren(...list.map((c) => {
+    const open = windowsOf(c.id).length > 0;
+    const current = c.id === currentId;
+    return el('article', { class: current ? 'card current' : 'card' },
+      el('div', { class: 'card-top' },
+        el('a', { class: 'card-name', href: `collection.html?id=${encodeURIComponent(c.id)}` }, c.name),
+        current && el('span', { class: 'badge-current' }, 'This window'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'card-pages' }, icon('pages'), plural(c.pages.length, 'page')),
+        el('span', { class: 'card-state' }, open ? 'Open' : 'Closed'),
+        el('label', { class: 'toggle', title: open ? 'Close the window' : 'Open in a window' },
+          el('input', {
+            type: 'checkbox',
+            role: 'switch',
+            checked: open,
+            'aria-label': `“${c.name}” window`,
+            onchange: (e) => toggleWindow(c.id, e.target, windowsOf(c.id)),
+          }),
+          el('span')),
       ),
-    ),
-  );
+      c.description && el('p', { class: 'card-desc' }, c.description),
+      el('div', { class: 'card-bottom' },
+        el('button', {
+          class: 'icon-btn ghost danger',
+          'aria-label': `Delete “${c.name}”`,
+          title: 'Delete',
+          onclick: async () => {
+            if (confirm(`Delete the collection “${c.name}”? This cannot be undone.`)) {
+              await removeCollection(c.id);
+              toast('Collection deleted');
+            }
+          },
+        }, icon('delete'))),
+    );
+  }));
   empty.hidden = all.length > 0;
-  if (all.length && !list.length) {
-    rows.append(el('tr', {}, el('td', { colspan: 4, class: 'muted' }, 'No collections match the filter.')));
+  document.getElementById('noMatch').hidden = !(all.length && !list.length);
+}
+
+// The toggle opens the collection's window, or closes it.
+async function toggleWindow(id, input, windowIds) {
+  try {
+    if (input.checked) await send({ type: 'open', id });
+    else await Promise.all(windowIds.map((w) => api.windows.remove(w)));
+  } catch (e) {
+    input.checked = !input.checked;
+    toast(e.message);
   }
 }
 

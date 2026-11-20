@@ -264,6 +264,34 @@ export function el(tag, props = {}, ...children) {
   return node;
 }
 
+// Stroke icons (24×24, currentColor), shared by the extension pages.
+const ICONS = {
+  back: 'M15 6l-6 6 6 6',
+  delete: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  drag: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  edit: 'M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4',
+  export: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  external: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+  pages: 'M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM3 9h18',
+};
+export function icon(name, size = 16) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', name === 'drag' ? '3.2' : '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', ICONS[name]);
+  svg.append(path);
+  return svg;
+}
+
 export async function send(msg) {
   const res = await api.runtime.sendMessage(msg);
   if (!res?.ok) throw new Error(res?.error || 'Unknown error');
