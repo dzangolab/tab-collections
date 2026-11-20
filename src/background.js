@@ -189,6 +189,16 @@ async function windowState(windowId) {
   return { col, pages, changed: hasChanged(s, col, pages) };
 }
 
+// For the popup's list: each open collection's window, and whether its tabs have drifted.
+async function driftStatus() {
+  const out = {};
+  for (const w of Object.keys(await getAll('sessions', {}))) {
+    const state = await windowState(Number(w));
+    if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed };
+  }
+  return out;
+}
+
 // The toolbar popup's button: the same prompt as closing the window, while it stays open.
 async function reviewWindow(windowId) {
   await refresh(windowId);
@@ -230,6 +240,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await adoptWindow(msg.windowId, msg.collection.id);
         return msg.collection.id;
       }
+      case 'driftStatus': return driftStatus();
       case 'reviewWindow': return reviewWindow(msg.windowId);
       case 'windowStatus': {
         const state = await windowState(msg.windowId);
