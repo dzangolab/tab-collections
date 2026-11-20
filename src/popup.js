@@ -5,9 +5,27 @@ import {
 
 const $ = (s) => document.getElementById(s);
 
+// Yellow warning triangle shown on top of a drifted collection's page count.
+function warningBadge() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 14');
+  svg.setAttribute('class', 'badge');
+  svg.setAttribute('aria-hidden', 'true');
+  const tri = document.createElementNS(ns, 'path');
+  tri.setAttribute('d', 'M8 .8 15.4 13.2H.6Z');
+  tri.setAttribute('class', 'tri');
+  const mark = document.createElementNS(ns, 'path');
+  mark.setAttribute('d', 'M8 5v4M8 10.6v.9');
+  mark.setAttribute('class', 'excl');
+  svg.append(tri, mark);
+  return svg;
+}
+
 async function init() {
-  const [cols, sessions, win] = await Promise.all([
+  const [cols, sessions, win, drift] = await Promise.all([
     getCollections(), getAll('sessions', {}), api.windows.getCurrent({ populate: true }),
+    send({ type: 'driftStatus' }).catch(() => ({})),
   ]);
   const list = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
   const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
@@ -33,9 +51,21 @@ async function init() {
               onchange: (e) => toggleWindow(c.id, e.target),
             }),
             el('span', { class: 'slider' })),
-          el('span', { class: 'n' }, c.pages.length)))
+          drift[c.id]?.changed
+            ? el('button', {
+                class: 'n drift',
+                title: 'The tabs in this window have changed. Click to review.',
+                'aria-label': `${c.pages.length} pages. The tabs in the “${c.name}” window have changed. Review`,
+                onclick: (e) => { e.stopPropagation(); reviewDrift(drift[c.id].windowId); },
+              }, String(c.pages.length), warningBadge())
+            : el('span', { class: 'n' }, c.pages.length)))
       : [el('div', { class: 'muted small', style: 'padding: 8px 12px' }, 'No collections yet.')]),
   );
+
+  // The same "Update collection?" prompt as closing the window.
+  async function reviewDrift(windowId) {
+    try { await send({ type: 'reviewWindow', windowId }); window.close(); } catch (e) { alert(e.message); }
+  }
 
   async function openCollection(id) {
     try { await send({ type: 'open', id }); window.close(); } catch (e) { alert(e.message); }
