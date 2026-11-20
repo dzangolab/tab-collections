@@ -52,9 +52,9 @@ async function init() {
   const updateByDefault = (await getSettings()).closeDefault === 'update';
   const updateButton = el('button', { class: updateByDefault && 'primary', onclick: () => update(col) }, 'Update');
   const keepButton = el('button', { class: !updateByDefault && 'primary', onclick: discard }, 'Keep unchanged');
-  document.title = `Update “${col.name}”?`;
+  document.title = `Update “${col.name}” collection`;
   root.replaceChildren(...[
-    el('h1', {}, `Update “${col.name}”?`),
+    el('h1', {}, `Update “${col.name}” collection`),
     el('p', {}, `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
     !!added.length && el('h2', {}, `${plural(added.length, 'page')} added`),
     !!added.length && el('ul', { class: 'changes' }, ...added.map((p) => pageLine(p, 'add', '+'))),
