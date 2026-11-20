@@ -55,9 +55,10 @@ async function init() {
     }));
   }
 
-  if (mode === 'window' && current && cols[current.collectionId]) {
-    $('current').textContent = `This window is the collection “${cols[current.collectionId].name}”.`;
+  if (current && cols[current.collectionId]) {
+    $('current').hidden = true;
     $('saveForm').hidden = true;
+    await showCollectionWindow(win.id);
   } else {
     const what = { window: "this window's", selected: 'the selected', workspace: "this workspace's" }[mode];
     $('current').textContent = `Save ${what} ${plural(pages.length, 'tab')} as a new collection:`;
@@ -77,6 +78,35 @@ async function init() {
     }
     await api.tabs.create({ url: api.runtime.getURL(`collection.html?id=${encodeURIComponent(col.id)}`), windowId: win.id });
     window.close();
+  });
+}
+
+// A window opened from a collection: when its tabs have changed, a button opens the same
+// "Update collection?" prompt as closing the window.
+async function showCollectionWindow(windowId) {
+  $('collectionSection').hidden = false;
+  let status;
+  try {
+    status = await send({ type: 'windowStatus', windowId });
+  } catch (e) {
+    $('collectionMsg').textContent = `Could not check this window: ${e.message}`;
+    return;
+  }
+  if (!status) {
+    $('collectionMsg').textContent = 'This window is no longer linked to its collection.';
+    return;
+  }
+  $('collectionMsg').textContent = status.changed
+    ? `The tabs in this window differ from the collection “${status.name}”.`
+    : `This window is the collection “${status.name}”.`;
+  $('saveChanges').hidden = !status.changed;
+  $('saveChanges').addEventListener('click', async () => {
+    try {
+      await send({ type: 'reviewWindow', windowId });
+      window.close();
+    } catch (e) {
+      $('collectionMsg').textContent = e.message;
+    }
   });
 }
 

@@ -1,5 +1,5 @@
 import {
-  api, getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural,
+  api, getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural, send,
 } from './common.js';
 
 const root = document.getElementById('root');
@@ -24,11 +24,13 @@ async function init() {
       el('button', { onclick: closeSelf }, 'Close'));
     return;
   }
+  // `live`: the window is still open (the user asked from the toolbar popup).
+  const theWindowHad = pending.live ? 'The open window has' : 'The window you closed had';
   const col = await getCollection(pending.collectionId);
   if (!col) {
     root.replaceChildren(
       el('h1', {}, `“${pending.collectionName}” no longer exists`),
-      el('p', { class: 'muted' }, `The window you closed had ${plural(pending.pages.length, 'tab')}. Save them as a new collection?`),
+      el('p', { class: 'muted' }, `${theWindowHad} ${plural(pending.pages.length, 'tab')}. Save them as a new collection?`),
       el('div', { class: 'buttons' },
         el('button', { class: 'primary', onclick: () => saveAsNew(pending.collectionName, '') }, 'Save as new collection'),
         el('button', { onclick: discard }, 'Discard')),
@@ -42,26 +44,35 @@ async function init() {
   document.title = `Update “${col.name}”?`;
   root.replaceChildren(...[
     el('h1', {}, `Update “${col.name}”?`),
-    el('p', { class: 'muted' },
-      `The window you closed (${new Date(pending.closedAt).toLocaleTimeString()}) had different tabs from the saved collection.`),
+    el('p', {}, `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
     !!added.length && el('h2', {}, `${plural(added.length, 'page')} added`),
     !!added.length && el('ul', { class: 'changes' }, ...added.map((p) => pageLine(p, 'add', '+'))),
     !!removed.length && el('h2', {}, `${plural(removed.length, 'page')} removed`),
     !!removed.length && el('ul', { class: 'changes' }, ...removed.map((p) => pageLine(p, 'rem', '−'))),
     reordered && el('p', {}, 'The same pages are there, but in a different order.'),
     el('details', {},
-      el('summary', {}, `Tabs in the closed window (${pending.pages.length})`),
+      el('summary', {}, `Tabs in the ${pending.live ? 'open' : 'closed'} window (${pending.pages.length})`),
       el('ul', { class: 'changes' }, ...pending.pages.map((p) => pageLine(p, '', '•')))),
     el('div', { class: 'buttons' },
-      el('button', { class: 'primary', onclick: () => update(col) }, 'Update collection'),
+      el('button', { class: 'primary', onclick: () => update(col) }, 'Save'),
       el('button', { onclick: discard }, 'Keep unchanged'),
-      el('button', { onclick: () => saveAsNew(`${col.name} (copy)`, col.description) }, 'Save as new collection'),
     ),
+    el('h2', {}, 'Save as a new collection'),
+    el('form', {
+      class: 'row',
+      onsubmit: (e) => {
+        e.preventDefault();
+        saveAsNew(e.target.elements.name.value.trim() || `${col.name} (copy)`, col.description);
+      },
+    },
+    el('input', { type: 'text', name: 'name', placeholder: `${col.name} (copy)` }),
+    el('button', { type: 'submit', class: 'primary' }, 'Save')),
   ].filter(Boolean));
 
   async function update(c) {
     c.pages = pending.pages.map((p) => ({ url: p.url, title: p.title }));
     await putCollection(c);
+    await track(c.id);
     await resolvePending(id);
     closeSelf();
   }
@@ -72,9 +83,19 @@ async function init() {
   }
 
   async function saveAsNew(name, description) {
-    await putCollection(makeCollection({ name, description, pages: pending.pages }));
+    const c = makeCollection({ name, description, pages: pending.pages });
+    await putCollection(c);
+    await track(c.id);
     await resolvePending(id);
     closeSelf();
+  }
+
+  // A window that is still open stays tracked, now as the collection just saved, so closing it
+  // later only asks about changes made after this save.
+  async function track(collectionId) {
+    if (!pending.live) return;
+    try { await api.windows.get(pending.windowId); } catch { return; } // closed in the meantime
+    await send({ type: 'adopt', windowId: pending.windowId, collectionId, baseline: pending.pages.map((p) => p.url) });
   }
 }
 

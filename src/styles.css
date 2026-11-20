@@ -28,6 +28,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* win over display rules such as .row { display: flex } */
 body {
   margin: 0;
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
