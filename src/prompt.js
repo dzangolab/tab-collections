@@ -11,6 +11,13 @@ async function closeSelf() {
   else window.close();
 }
 
+// The user decides there and then: switching to another window closes the prompt, which counts
+// as "Keep unchanged". Not while a choice is being saved; that closes the prompt itself.
+let busy = false;
+let hadFocus = document.hasFocus();
+window.addEventListener('focus', () => { hadFocus = true; });
+window.addEventListener('blur', () => { if (hadFocus && !busy) closeSelf(); });
+
 function pageLine(p, cls, sign) {
   return el('li', { class: cls, title: p.url },
     el('span', { class: 'tag' }, sign), p.title || p.url, p.title && el('span', { class: 'u' }, p.url));
@@ -70,6 +77,7 @@ async function init() {
   ].filter(Boolean));
 
   async function update(c) {
+    busy = true;
     c.pages = pending.pages.map((p) => ({ url: p.url, title: p.title }));
     await putCollection(c);
     await track(c.id);
@@ -78,11 +86,13 @@ async function init() {
   }
 
   async function discard() {
+    busy = true;
     await resolvePending(id);
     closeSelf();
   }
 
   async function saveAsNew(name, description) {
+    busy = true;
     const c = makeCollection({ name, description, pages: pending.pages });
     await putCollection(c);
     await track(c.id);
