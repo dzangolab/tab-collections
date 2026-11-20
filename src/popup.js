@@ -55,6 +55,21 @@ async function init() {
     }));
   }
 
+  // A window opened from a collection can save its tab changes, with the same prompt as closing it.
+  if (current && cols[current.collectionId]) {
+    $('changesRow').hidden = false;
+    $('saveChanges').addEventListener('click', async () => {
+      $('changesMsg').textContent = '';
+      try {
+        const result = await send({ type: 'reviewWindow', windowId: win.id });
+        if (result === 'review') window.close();
+        else $('changesMsg').textContent = 'No changes to save.';
+      } catch (e) {
+        $('changesMsg').textContent = e.message;
+      }
+    });
+  }
+
   if (mode === 'window' && current && cols[current.collectionId]) {
     $('current').textContent = `This window is the collection “${cols[current.collectionId].name}”.`;
     $('saveForm').hidden = true;

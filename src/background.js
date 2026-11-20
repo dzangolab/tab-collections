@@ -65,14 +65,16 @@ async function openCollection(id) {
   return { opened: true, windowId: win.id };
 }
 
-// Start tracking an existing window as a collection (used by "Save this window").
-async function adoptWindow(windowId, collectionId) {
+// Start tracking an existing window as a collection (used by "Save this window", and after saving
+// an open window's changes). `baseline` is the list of URLs that counts as unchanged; it defaults
+// to the window's current tabs.
+async function adoptWindow(windowId, collectionId, baseline = null) {
   await withSessions(async (ss) => {
     for (const [w, s] of Object.entries(ss)) if (s.collectionId === collectionId) delete ss[w];
     const tabs = sortTabs(await api.tabs.query({ windowId }));
     ss[windowId] = {
       collectionId,
-      baseline: tabs.map((t) => t.url || t.pendingUrl || ''),
+      baseline: baseline || tabs.map((t) => t.url || t.pendingUrl || ''),
       initial: {},
       openedAt: Date.now(),
       tabs: tabs.map(tabToPage),
@@ -125,27 +127,44 @@ api.windows.onRemoved.addListener(async (windowId) => {
     if (found) delete ss[windowId];
     return found;
   });
-  if (s) await reviewClosedSession(s);
+  if (s) await reviewSession(s, { windowId });
 });
 
-async function reviewClosedSession(s) {
+// Compares a session's tabs with its collection and, when they differ, opens the review prompt.
+// `live` means the window is still open (the user asked to save its changes).
+// Returns 'missing', 'unchanged' or 'review'.
+async function reviewSession(s, { live = false, windowId = null } = {}) {
   const col = await getCollection(s.collectionId);
-  if (!col) return; // collection was deleted while open
+  if (!col) return 'missing'; // collection was deleted while open
 
   const nowPages = cleanPages(s.tabs || []);
   const nowUrls = nowPages.map((p) => p.url);
   const baseUrls = (s.baseline || []).filter((u) => !isIgnorableUrl(u));
   const colUrls = col.pages.map((p) => p.url).filter((u) => !isIgnorableUrl(u));
-  if (sameUrlList(nowUrls, baseUrls) || sameUrlList(nowUrls, colUrls)) return; // unchanged
+  if (sameUrlList(nowUrls, baseUrls) || sameUrlList(nowUrls, colUrls)) return 'unchanged';
 
   const id = newId();
   await withPending((p) => {
+    // A newer review of the same window replaces any earlier one from it that is still open.
+    if (windowId != null) {
+      for (const [k, v] of Object.entries(p)) if (v.windowId === windowId) delete p[k];
+    }
     p[id] = {
       id, collectionId: col.id, collectionName: col.name, pages: nowPages, closedAt: Date.now(),
       baseline: (s.baseline || []).length === col.pages.length ? s.baseline : null,
+      live, windowId,
     };
   });
   try { await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
+  return 'review';
+}
+
+// "Save changes" for a window that is still open.
+async function reviewWindow(windowId) {
+  await refresh(windowId);
+  const s = (await getAll('sessions', {}))[windowId];
+  if (!s) throw new Error('This window is not a collection');
+  return reviewSession(s, { live: true, windowId });
 }
 
 // After a browser restart, window ids are reused, so every tracked window is gone.
@@ -155,7 +174,7 @@ api.runtime.onStartup.addListener(async () => {
     for (const k of Object.keys(ss)) delete ss[k];
     return vals;
   });
-  for (const s of old) await reviewClosedSession(s);
+  for (const s of old) await reviewSession(s);
   updateBadge();
 });
 
@@ -168,7 +187,7 @@ api.runtime.onInstalled.addListener(async () => {
     }
     return out;
   });
-  for (const s of stale) await reviewClosedSession(s);
+  for (const s of stale) await reviewSession(s);
   updateBadge();
 });
 
@@ -189,7 +208,8 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case 'open': return openCollection(msg.id);
-      case 'adopt': return adoptWindow(msg.windowId, msg.collectionId);
+      case 'adopt': return adoptWindow(msg.windowId, msg.collectionId, msg.baseline);
+      case 'reviewWindow': return reviewWindow(msg.windowId);
       case 'saveAndAdopt': {
         await putCollection(msg.collection);
         await adoptWindow(msg.windowId, msg.collection.id);
