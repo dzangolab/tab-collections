@@ -52,8 +52,14 @@ node build.mjs safari   # or a single target: chromium | firefox | safari
 - `src/` is the single shared source. Every file uses `api` (= `browser` in Firefox/Safari, `chrome` in Chromium).
 - `build.mjs` writes a manifest for each browser and bundles `background.js` into one classic script. Safari doesn't support module service workers, and Firefox uses event pages instead of service workers.
 
+## Vivaldi workspaces
+- **Collections page → From Vivaldi workspaces…** lists the workspaces that have open tabs. Tick the ones you want, name each one, then click **Create collections**.
+- **Toolbar popup** in Vivaldi: **Save** captures only the current workspace's tabs (not every tab in the window).
+- Vivaldi has no official workspaces API. This uses a hidden per-tab field (`vivExtData.workspaceId`) that Vivaldi has exposed in many versions. Workspace names aren't available, so each collection gets a suggested name (its main sites) that you can edit.
+- If your Vivaldi version doesn't expose that field, the button stays hidden. Instead, open the workspace, select its tabs (click the first tab, Shift-click the last), then use the popup's **Save**. It saves just the selected tabs. This works in every browser.
+
 ## Using it
-- **Toolbar popup:** open a collection, go to *Manage*, or save the current window's tabs as a collection.
+- **Toolbar popup:** open a collection, go to *Manage*, or save tabs as a collection: the selected tabs if you've selected several, otherwise the whole window.
 - **Collections page:** a table of collections with description and page count; create, open, delete, import, export.
 - **Collection page:** edit the name, description and pages (add, remove, reorder, edit), then Save (Ctrl/Cmd+S).
 - **Open a collection:** a new window with one tab per page. If it's already open, that window is focused instead.

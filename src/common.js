@@ -269,3 +269,64 @@ export async function openManagerPage(path = 'collections.html') {
 export function plural(n, word) {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
+
+// ---------- Vivaldi workspaces ----------
+// Vivaldi has no official workspaces API. Some versions attach a `vivExtData` field
+// (JSON) to each tab that includes the tab's workspaceId. Workspace names are not exposed.
+
+export function vivaldiData(tab) {
+  const raw = tab?.vivExtData;
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export const hasVivaldiData = (tabs) => tabs.some((t) => t && 'vivExtData' in t);
+
+// workspaceId is sometimes reported as a float, so round it. 'none' = tabs outside any workspace.
+export function workspaceKey(data) {
+  const id = data?.workspaceId;
+  return id == null || id === '' || Number.isNaN(Number(id)) ? 'none' : String(Math.round(Number(id)));
+}
+
+const tabPage = (t) => ({ url: t.url || t.pendingUrl || '', title: t.title || '' });
+
+// Group tabs (from all windows) by Vivaldi workspace. Returns null when not detectable.
+export function groupByWorkspace(tabs) {
+  if (!hasVivaldiData(tabs)) return null;
+  const groups = new Map();
+  const sorted = [...tabs].sort((a, b) => a.windowId - b.windowId || a.index - b.index);
+  for (const t of sorted) {
+    const d = vivaldiData(t) || {};
+    if (d.panelId) continue; // web panels in the sidebar
+    const page = tabPage(t);
+    if (isIgnorableUrl(page.url)) continue;
+    const key = workspaceKey(d);
+    if (!groups.has(key)) groups.set(key, { key, pages: [] });
+    groups.get(key).pages.push(page);
+  }
+  return [...groups.values()].sort((a, b) =>
+    a.key === 'none' ? 1 : b.key === 'none' ? -1 : Number(a.key) - Number(b.key));
+}
+
+export async function getVivaldiWorkspaces() {
+  return groupByWorkspace(await api.tabs.query({}));
+}
+
+// Workspace ids are creation timestamps (ms) in current Vivaldi versions.
+export function workspaceCreated(key) {
+  const n = Number(key);
+  return n > 1e12 && n < 1e13 ? new Date(n) : null;
+}
+
+export function suggestName(pages) {
+  const hosts = [];
+  for (const p of pages) {
+    try {
+      const h = new URL(p.url).hostname.replace(/^www\./, '');
+      if (h && !hosts.includes(h)) hosts.push(h);
+    } catch { /* skip */ }
+  }
+  if (!hosts.length) return 'Workspace';
+  return hosts.slice(0, 2).join(', ') + (hosts.length > 2 ? ` +${hosts.length - 2}` : '');
+}

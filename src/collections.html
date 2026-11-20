@@ -12,6 +12,7 @@
     <h1>Collections</h1>
     <div class="spacer"></div>
     <input type="search" id="filter" placeholder="Filter…" style="width: 200px">
+    <button id="vivaldi" hidden>From Vivaldi workspaces…</button>
     <button id="import">Import…</button>
     <button id="export">Export all</button>
     <button id="new" class="primary">New collection</button>
@@ -39,6 +40,18 @@
   </div>
   <p class="muted small">Collections are stored only in this browser. Use Export to back up or share them as a file.</p>
 </main>
+<dialog id="wsDialog">
+  <form method="dialog" id="wsForm">
+    <h2 style="margin-top:0">Create collections from Vivaldi workspaces</h2>
+    <p class="muted small">Vivaldi doesn't share workspace names with extensions, so name each collection here.
+      Only tabs that are currently open are included.</p>
+    <div id="wsList"></div>
+    <div class="wsbuttons">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button id="wsCreate" value="create" class="primary">Create collections</button>
+    </div>
+  </form>
+</dialog>
 <div class="toast" id="toast"></div>
 <script type="module" src="collections.js"></script>
 </body>

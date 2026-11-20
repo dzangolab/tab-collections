@@ -1,5 +1,6 @@
 import {
-  api, getCollections, getAll, getPending, makeCollection, cleanPages, el, send, openManagerPage, plural,
+  api, getCollections, getAll, getPending, makeCollection, putCollection, cleanPages, el, send, openManagerPage, plural,
+  vivaldiData, hasVivaldiData, workspaceKey, suggestName,
 } from './common.js';
 
 const $ = (s) => document.getElementById(s);
@@ -35,20 +36,45 @@ async function init() {
       : '',
   );
 
+  // What "Save" captures: selected tabs > current Vivaldi workspace > whole window.
   const current = sessions[win.id];
-  const pages = cleanPages(win.tabs.sort((a, b) => a.index - b.index).map((t) => ({ url: t.url || t.pendingUrl || '', title: t.title || '' })));
-  if (current && cols[current.collectionId]) {
+  const ordered = win.tabs.sort((a, b) => a.index - b.index);
+  const toPages = (tabs) => cleanPages(tabs.map((t) => ({ url: t.url || t.pendingUrl || '', title: t.title || '' })));
+  const highlighted = ordered.filter((t) => t.highlighted);
+  let mode = 'window';
+  let pages = toPages(ordered);
+  if (highlighted.length > 1) {
+    mode = 'selected';
+    pages = toPages(highlighted);
+  } else if (hasVivaldiData(ordered)) {
+    mode = 'workspace';
+    const key = workspaceKey(vivaldiData(ordered.find((t) => t.active)));
+    pages = toPages(ordered.filter((t) => {
+      const d = vivaldiData(t) || {};
+      return !d.panelId && workspaceKey(d) === key;
+    }));
+  }
+
+  if (mode === 'window' && current && cols[current.collectionId]) {
     $('current').textContent = `This window is the collection “${cols[current.collectionId].name}”.`;
     $('saveForm').hidden = true;
   } else {
-    $('current').textContent = `Save this window's ${plural(pages.length, 'tab')} as a new collection:`;
+    const what = { window: "this window's", selected: 'the selected', workspace: "this workspace's" }[mode];
+    $('current').textContent = `Save ${what} ${plural(pages.length, 'tab')} as a new collection:`;
+    if (mode !== 'window') $('saveName').placeholder = suggestName(pages);
     if (!pages.length) $('saveForm').querySelector('button').disabled = true;
   }
 
   $('saveForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const col = makeCollection({ name: $('saveName').value || `Window saved ${new Date().toLocaleDateString()}`, pages });
-    await send({ type: 'saveAndAdopt', windowId: win.id, collection: col });
+    const fallback = mode === 'window' ? `Window saved ${new Date().toLocaleDateString()}` : suggestName(pages);
+    const col = makeCollection({ name: $('saveName').value || fallback, pages });
+    if (mode === 'window') {
+      // The whole window becomes this collection's window, so closing it triggers the update check.
+      await send({ type: 'saveAndAdopt', windowId: win.id, collection: col });
+    } else {
+      await putCollection(col);
+    }
     await api.tabs.create({ url: api.runtime.getURL(`collection.html?id=${encodeURIComponent(col.id)}`), windowId: win.id });
     window.close();
   });

@@ -1,5 +1,5 @@
 import {
-  api, getCollections, saveCollections, putCollection, removeCollection, makeCollection, getAll, getPending,
+  api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll, getPending,
   buildExport, parseImport, downloadJson, el, send, plural, openReview,
 } from './common.js';
 
@@ -111,6 +111,55 @@ fileInput.addEventListener('change', async () => {
   }
 });
 
+// ---------- Vivaldi workspaces → collections ----------
+const wsDialog = document.getElementById('wsDialog');
+const wsList = document.getElementById('wsList');
+const vivaldiBtn = document.getElementById('vivaldi');
+let wsRows = [];
+
+async function detectVivaldi() {
+  try { vivaldiBtn.hidden = !(await getVivaldiWorkspaces()); } catch { vivaldiBtn.hidden = true; }
+}
+
+vivaldiBtn.addEventListener('click', async () => {
+  const workspaces = await getVivaldiWorkspaces();
+  if (!workspaces?.length) return toast('No workspace tabs found');
+  let n = 0;
+  wsRows = workspaces.map((ws) => {
+    const created = workspaceCreated(ws.key);
+    const check = el('input', { type: 'checkbox', checked: ws.key !== 'none' });
+    const name = el('input', { type: 'text', value: suggestName(ws.pages), required: true });
+    const label = ws.key === 'none' ? 'Tabs not in any workspace' : `Workspace ${++n}`;
+    const row = el('div', { class: 'ws' },
+      check, name, el('span', { class: 'count' }, plural(ws.pages.length, 'tab')),
+      el('div', { class: 'meta', title: ws.pages.map((p) => p.url).join('\n') },
+        label, created ? ` · created ${created.toLocaleDateString()}` : '', ' · ',
+        ws.pages.slice(0, 3).map((p) => p.title || p.url).join(' · ')));
+    return { ws, check, name, row };
+  });
+  wsList.replaceChildren(...wsRows.map((r) => r.row));
+  wsDialog.showModal();
+});
+
+wsDialog.addEventListener('close', async () => {
+  if (wsDialog.returnValue !== 'create') return;
+  const chosen = wsRows.filter((r) => r.check.checked);
+  if (!chosen.length) return;
+  const all = await getCollections();
+  const date = new Date().toLocaleDateString();
+  for (const r of chosen) {
+    const col = makeCollection({
+      name: r.name.value,
+      description: `Created from a Vivaldi workspace on ${date}.`,
+      pages: r.ws.pages,
+    });
+    all[col.id] = col;
+  }
+  await saveCollections(all);
+  toast(`Created ${plural(chosen.length, 'collection')}`);
+});
+
+detectVivaldi();
 filter.addEventListener('input', render);
 api.storage.onChanged.addListener((changes, area) => { if (area === 'local') render(); });
 render();
