@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Update collection?</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    main { max-width: 560px; padding: 22px; }
+    h1 { font-size: 18px; margin-bottom: 6px; }
+    ul.changes { list-style: none; padding: 0; margin: 6px 0 14px; }
+    ul.changes li { padding: 4px 0; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    ul.changes li:last-child { border-bottom: 0; }
+    .tag { display: inline-block; width: 18px; font-weight: 700; }
+    .add .tag { color: #2e9b55; }
+    .rem .tag { color: var(--danger); }
+    .u { color: var(--muted); font-size: 12px; margin-left: 6px; }
+    .buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+    details { margin-top: 10px; }
+    summary { cursor: pointer; color: var(--muted); }
+  </style>
+</head>
+<body>
+<main id="root"></main>
+<script type="module" src="prompt.js"></script>
+</body>
+</html>

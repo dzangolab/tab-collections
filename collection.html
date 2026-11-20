@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Collection</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <a href="collections.html">← All collections</a>
+    <div class="spacer"></div>
+    <button id="exportOne">Export</button>
+    <button id="delete" class="danger">Delete</button>
+    <button id="open" class="primary">Open collection</button>
+  </div>
+
+  <div id="notFound" class="panel empty" hidden>
+    This collection no longer exists. <a href="collections.html">Back to all collections</a>
+  </div>
+
+  <div id="editor" hidden>
+    <div id="external" class="banner" hidden>
+      This collection was changed elsewhere while you were editing.
+      <a href="#" id="reload">Discard my edits and reload</a>
+    </div>
+
+    <div class="field">
+      <label for="name">Name</label>
+      <input type="text" id="name" maxlength="200">
+    </div>
+    <div class="field">
+      <label for="description">Description</label>
+      <textarea id="description" placeholder="What is this collection for?"></textarea>
+    </div>
+
+    <h2>Web pages <span id="count" class="muted small"></span></h2>
+    <div class="panel">
+      <table class="pages">
+        <thead>
+          <tr><th></th><th></th><th>Title</th><th>URL</th><th></th></tr>
+        </thead>
+        <tbody id="pages"></tbody>
+      </table>
+      <div id="noPages" class="empty" hidden>No pages yet — add one below.</div>
+      <form class="addrow" id="addForm">
+        <input type="text" class="url" id="addUrl" placeholder="https://example.com" required>
+        <input type="text" class="title" id="addTitle" placeholder="Title (optional)">
+        <button type="submit">Add page</button>
+      </form>
+    </div>
+
+    <div class="savebar">
+      <span class="status" id="status">All changes saved</span>
+      <button id="revert" disabled>Revert</button>
+      <button id="save" class="primary" disabled>Save</button>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+<script type="module" src="collection.js"></script>
+</body>
+</html>

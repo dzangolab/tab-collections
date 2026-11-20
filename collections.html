@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Collections</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <h1>Collections</h1>
+    <div class="spacer"></div>
+    <input type="search" id="filter" placeholder="Filter…" style="width: 200px">
+    <button id="import">Import…</button>
+    <button id="export">Export all</button>
+    <button id="new" class="primary">New collection</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </div>
+
+  <div id="pending"></div>
+
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th class="num">Pages</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>
+      No collections yet. Create one, or open the toolbar popup in any window and choose
+      “Save this window as a collection”.
+    </div>
+  </div>
+  <p class="muted small">Collections are stored only in this browser. Use Export to back up or share them as a file.</p>
+</main>
+<div class="toast" id="toast"></div>
+<script type="module" src="collections.js"></script>
+</body>
+</html>
