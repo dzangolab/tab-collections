@@ -1,6 +1,6 @@
 import {
   api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll,
-  buildExport, parseImport, downloadJson, el, send, plural,
+  buildExport, parseImport, downloadJson, el, send, plural, getSettings, saveSetting,
 } from './common.js';
 
 const rows = document.getElementById('rows');
@@ -139,6 +139,15 @@ wsDialog.addEventListener('close', async () => {
   }
   await saveCollections(all);
   toast(`Created ${plural(chosen.length, 'collection')}`);
+});
+
+// ---------- Settings ----------
+
+const closeDefault = document.getElementById('closeDefault');
+getSettings().then((s) => { closeDefault.value = s.closeDefault; });
+closeDefault.addEventListener('change', async () => {
+  await saveSetting('closeDefault', closeDefault.value);
+  toast('Setting saved');
 });
 
 detectVivaldi();
