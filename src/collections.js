@@ -1,6 +1,7 @@
 import {
   api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll,
   buildExport, parseImport, downloadJson, el, icon, send, plural, getSettings, saveSetting,
+  closedDrift, collectionDrift,
 } from './common.js';
 
 const cards = document.getElementById('cards');
@@ -19,7 +20,10 @@ function toast(msg) {
 const thisWindow = api.tabs.getCurrent().then((t) => t?.windowId).catch(() => null);
 
 async function render() {
-  const [cols, sessions, windowId] = await Promise.all([getCollections(), getAll('sessions', {}), thisWindow]);
+  const [cols, sessions, windowId, closed, live] = await Promise.all([
+    getCollections(), getAll('sessions', {}), thisWindow, closedDrift(),
+    send({ type: 'driftStatus' }).catch(() => ({})),
+  ]);
   const windowsOf = (id) => Object.entries(sessions).filter(([, s]) => s.collectionId === id).map(([w]) => Number(w));
   const currentId = sessions[windowId]?.collectionId;
   const q = filter.value.trim().toLowerCase();
@@ -29,7 +33,8 @@ async function render() {
   cards.replaceChildren(...list.map((c) => {
     const open = windowsOf(c.id).length > 0;
     const current = c.id === currentId;
-    return el('article', { class: current ? 'card current' : 'card' },
+    const strip = collectionDrift(c.id, closed, live, toast);
+    return el('article', { class: ['card', current && 'current', strip && 'drifted'].filter(Boolean).join(' ') },
       el('div', { class: 'card-top' },
         el('a', { class: 'card-name', href: `collection.html?id=${encodeURIComponent(c.id)}` }, c.name),
         current && el('span', { class: 'badge-current' }, 'This window'),
@@ -59,6 +64,7 @@ async function render() {
             }
           },
         }, icon('delete'))),
+      strip,
     );
   }));
   empty.hidden = all.length > 0;

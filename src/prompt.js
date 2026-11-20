@@ -11,12 +11,20 @@ async function closeSelf() {
   else window.close();
 }
 
-// The user decides there and then: switching to another window closes the prompt, which counts
-// as "Keep unchanged". Not while a choice is being saved; that closes the prompt itself.
+// The prompt closes itself when the user switches to another window, or after 5 minutes. A closed
+// window's changes then stay undecided, shown on the Collections and Collection pages. Not while
+// a choice is being saved; that closes the prompt itself.
+const AUTO_CLOSE_MS = 5 * 60_000;
 let busy = false;
 let hadFocus = document.hasFocus();
 window.addEventListener('focus', () => { hadFocus = true; });
 window.addEventListener('blur', () => { if (hadFocus && !busy) closeSelf(); });
+setTimeout(() => { if (!busy) closeSelf(); }, AUTO_CLOSE_MS);
+
+// Handled elsewhere (on a page, or by reopening the collection)? Nothing left to ask.
+api.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.pending && !busy && !changes.pending.newValue?.[id]) closeSelf();
+});
 
 function pageLine(p, cls, sign) {
   return el('li', { class: cls, title: p.url },
@@ -49,9 +57,10 @@ async function init() {
   const before = col.pages.map((p, i) => ({ ...p, url: pending.baseline?.[i] || p.url }));
   const { added, removed, reordered } = diffPages(before, pending.pages);
   // The setting decides which button is focused and highlighted; the other gets the plain style.
-  const updateByDefault = (await getSettings()).closeDefault === 'update';
+  // Restore only for a closed window: the extension never closes tabs of an open one.
+  const updateByDefault = pending.live || (await getSettings()).closeDefault === 'update';
   const updateButton = el('button', { class: updateByDefault && 'primary', onclick: () => update(col) }, 'Update');
-  const keepButton = el('button', { class: !updateByDefault && 'primary', onclick: discard }, 'Keep unchanged');
+  const keepButton = !pending.live && el('button', { class: !updateByDefault && 'primary', onclick: discard }, 'Restore');
   document.title = `Update “${col.name}” collection`;
   root.replaceChildren(...[
     el('h2', {}, `Update “${col.name}” collection`),
@@ -64,10 +73,7 @@ async function init() {
     el('details', {},
       el('summary', {}, `Tabs in the ${pending.live ? 'open' : 'closed'} window (${pending.pages.length})`),
       el('ul', { class: 'changes' }, ...pending.pages.map((p) => pageLine(p, '', '•')))),
-    el('div', { class: 'buttons' },
-      updateButton,
-      keepButton,
-    ),
+    el('div', { class: 'buttons' }, updateButton, keepButton),
     el('h2', {}, 'Save as a new collection'),
     el('form', {
       class: 'row',

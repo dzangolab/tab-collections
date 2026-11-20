@@ -1,6 +1,6 @@
 import {
   api, getCollection, putCollection, removeCollection, normalizeUrl, faviconUrl, faviconImg, buildExport, downloadJson,
-  slug, el, icon, send, plural,
+  slug, el, icon, send, plural, closedDrift, collectionDrift,
 } from './common.js';
 
 const params = new URLSearchParams(location.search);
@@ -61,6 +61,13 @@ function formatDate(ms) {
   return `${pad(d.getDate())} ${d.toLocaleString('en', { month: 'short' })} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// The drift strip, when this collection's window has changed.
+async function renderDrift() {
+  const [closed, live] = await Promise.all([closedDrift(), send({ type: 'driftStatus' }).catch(() => ({}))]);
+  const strip = collectionDrift(id, closed, live, toast);
+  $('drift').replaceChildren(...(strip ? [strip] : []));
+}
+
 function renderDates() {
   const parts = [];
   if (saved.createdAt) parts.push(`Created at: ${formatDate(saved.createdAt)}`);
@@ -83,6 +90,7 @@ async function load() {
   document.title = `${draft.name} — Collection`;
   renderHead();
   renderDates();
+  renderDrift();
   renderPages();
   setDirty(false);
   if (params.get('new')) { setEditing(true); nameIn.select(); nameIn.focus(); }
@@ -252,7 +260,9 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
 api.storage.onChanged.addListener(async (changes, area) => {
-  if (area !== 'local' || !changes.collections) return;
+  if (area !== 'local') return;
+  if (saved && (changes.pending || changes.sessions)) renderDrift();
+  if (!changes.collections) return;
   const fresh = changes.collections.newValue?.[id];
   if (!fresh) { if (!dirty) load(); return; }
   if (saved && JSON.stringify(fresh) === JSON.stringify(saved)) return;

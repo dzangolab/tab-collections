@@ -142,6 +142,15 @@ main.narrow { max-width: 960px; padding: 32px 24px 60px; }
 .card-state { color: var(--muted); }
 .card-desc { margin: 8px 0 0; max-width: 760px; color: var(--muted); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
 .card-bottom { display: flex; justify-content: flex-end; margin: 2px -12px 0 0; }
+.card { overflow: hidden; }
+.card.drifted { border-color: var(--warn-border); }
+.card .drift-strip { margin: 4px -20px -8px; border-top: 1px solid var(--warn-border); }
+
+/* A collection whose window's tabs have changed */
+.drift-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; background: var(--warn-bg); }
+.drift-strip .drift-msg { flex: 1 1 220px; font-weight: 600; }
+.drift-strip button { padding: 5px 12px; }
+#drift .drift-strip { margin-top: 16px; border: 1px solid var(--warn-border); border-radius: 10px; }
 
 /* ---------- Collection page: document style ---------- */
 .doc-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
