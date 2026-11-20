@@ -2,7 +2,7 @@
 // those windows, and asks the user what to do when a changed window is closed.
 
 import {
-  getAll, getCollection, putCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
+  api, getAll, getCollection, putCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
 } from './common.js';
 
 const SETTLE_WINDOW_MS = 60_000; // redirects within this time after opening are not "changes"
@@ -16,7 +16,7 @@ function serialized(key) {
       const data = await getAll(key, {});
       const before = JSON.stringify(data);
       const result = await fn(data);
-      if (JSON.stringify(data) !== before) await chrome.storage.local.set({ [key]: data });
+      if (JSON.stringify(data) !== before) await api.storage.local.set({ [key]: data });
       return result;
     });
     queue = run.catch((e) => console.error(`[${key}]`, e));
@@ -40,7 +40,7 @@ async function openCollection(id) {
   for (const [w, s] of Object.entries(sessions)) {
     if (s.collectionId !== id) continue;
     try {
-      await chrome.windows.update(Number(w), { focused: true });
+      await api.windows.update(Number(w), { focused: true });
       return { focused: true, windowId: Number(w) };
     } catch {
       await withSessions((ss) => { delete ss[w]; });
@@ -48,10 +48,10 @@ async function openCollection(id) {
   }
 
   const urls = col.pages.map((p) => p.url).filter(Boolean);
-  const win = await chrome.windows.create(urls.length ? { url: urls, focused: true } : { focused: true });
+  const win = await api.windows.create(urls.length ? { url: urls, focused: true } : { focused: true });
 
   await withSessions(async (ss) => {
-    const tabs = sortTabs(await chrome.tabs.query({ windowId: win.id }));
+    const tabs = sortTabs(await api.tabs.query({ windowId: win.id }));
     const baseline = urls.slice();
     const initial = {};
     tabs.forEach((t, i) => {
@@ -69,7 +69,7 @@ async function openCollection(id) {
 async function adoptWindow(windowId, collectionId) {
   await withSessions(async (ss) => {
     for (const [w, s] of Object.entries(ss)) if (s.collectionId === collectionId) delete ss[w];
-    const tabs = sortTabs(await chrome.tabs.query({ windowId }));
+    const tabs = sortTabs(await api.tabs.query({ windowId }));
     ss[windowId] = {
       collectionId,
       baseline: tabs.map((t) => t.url || t.pendingUrl || ''),
@@ -87,8 +87,8 @@ function refresh(windowId, settle) {
   return withSessions(async (ss) => {
     const s = ss[windowId];
     if (!s) return;
-    try { await chrome.windows.get(windowId); } catch { return; } // window is closing
-    const tabs = await chrome.tabs.query({ windowId });
+    try { await api.windows.get(windowId); } catch { return; } // window is closing
+    const tabs = await api.tabs.query({ windowId });
     if (!tabs.length) return;
     s.tabs = sortTabs(tabs).map(tabToPage);
 
@@ -103,23 +103,23 @@ function refresh(windowId, settle) {
   });
 }
 
-chrome.tabs.onCreated.addListener((t) => refresh(t.windowId));
-chrome.tabs.onUpdated.addListener((tabId, ci, tab) => {
+api.tabs.onCreated.addListener((t) => refresh(t.windowId));
+api.tabs.onUpdated.addListener((tabId, ci, tab) => {
   if (ci.url || ci.title || ci.status === 'complete') {
     refresh(tab.windowId, ci.status === 'complete' ? { tabId, url: tab.url } : null);
   }
 });
-chrome.tabs.onRemoved.addListener((tabId, info) => { if (!info.isWindowClosing) refresh(info.windowId); });
-chrome.tabs.onMoved.addListener((tabId, info) => refresh(info.windowId));
-chrome.tabs.onAttached.addListener((tabId, info) => refresh(info.newWindowId));
-chrome.tabs.onDetached.addListener((tabId, info) => refresh(info.oldWindowId));
-chrome.tabs.onReplaced.addListener(async (addedId) => {
-  try { refresh((await chrome.tabs.get(addedId)).windowId); } catch { /* gone */ }
+api.tabs.onRemoved.addListener((tabId, info) => { if (!info.isWindowClosing) refresh(info.windowId); });
+api.tabs.onMoved?.addListener((tabId, info) => refresh(info.windowId));
+api.tabs.onAttached?.addListener((tabId, info) => refresh(info.newWindowId));
+api.tabs.onDetached?.addListener((tabId, info) => refresh(info.oldWindowId));
+api.tabs.onReplaced?.addListener(async (addedId) => {
+  try { refresh((await api.tabs.get(addedId)).windowId); } catch { /* gone */ }
 });
 
 // ---------- Window closed: compare and ask ----------
 
-chrome.windows.onRemoved.addListener(async (windowId) => {
+api.windows.onRemoved.addListener(async (windowId) => {
   const s = await withSessions((ss) => {
     const found = ss[windowId];
     if (found) delete ss[windowId];
@@ -149,7 +149,7 @@ async function reviewClosedSession(s) {
 }
 
 // After a browser restart, window ids are reused, so every tracked window is gone.
-chrome.runtime.onStartup.addListener(async () => {
+api.runtime.onStartup.addListener(async () => {
   const old = await withSessions((ss) => {
     const vals = Object.values(ss);
     for (const k of Object.keys(ss)) delete ss[k];
@@ -160,11 +160,11 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 // After install / update / reload, drop sessions whose windows no longer exist.
-chrome.runtime.onInstalled.addListener(async () => {
+api.runtime.onInstalled.addListener(async () => {
   const stale = await withSessions(async (ss) => {
     const out = [];
     for (const [w, s] of Object.entries(ss)) {
-      try { await chrome.windows.get(Number(w)); } catch { out.push(s); delete ss[w]; }
+      try { await api.windows.get(Number(w)); } catch { out.push(s); delete ss[w]; }
     }
     return out;
   });
@@ -176,16 +176,16 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 async function updateBadge() {
   const n = Object.keys(await getAll('pending', {})).length;
-  await chrome.action.setBadgeText({ text: n ? String(n) : '' });
-  if (n) await chrome.action.setBadgeBackgroundColor({ color: '#d97706' });
+  await api.action.setBadgeText({ text: n ? String(n) : '' });
+  if (n) await api.action.setBadgeBackgroundColor({ color: '#d97706' });
 }
-chrome.storage.onChanged.addListener((changes, area) => {
+api.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.pending) updateBadge();
 });
 
 // ---------- Messages from pages ----------
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case 'open': return openCollection(msg.id);

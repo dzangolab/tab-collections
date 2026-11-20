@@ -1,5 +1,5 @@
 import {
-  getCollection, putCollection, removeCollection, normalizeUrl, faviconUrl, buildExport, downloadJson,
+  api, getCollection, putCollection, removeCollection, normalizeUrl, faviconUrl, faviconImg, buildExport, downloadJson,
   slug, el, send, plural,
 } from './common.js';
 
@@ -59,7 +59,7 @@ function renderPages() {
   $('noPages').hidden = n > 0;
   pagesBody.replaceChildren(
     ...draft.pages.map((p, i) => {
-      const fav = el('img', { src: isValidUrl(p.url) ? faviconUrl(p.url) : '', alt: '' });
+      const fav = faviconImg(p.url);
       const urlIn = el('input', {
         type: 'text', value: p.url,
         class: isValidUrl(p.url) ? '' : 'invalid',
@@ -81,7 +81,7 @@ function renderPages() {
           el('input', { type: 'text', value: p.title, placeholder: 'Untitled', oninput: (e) => { p.title = e.target.value; setDirty(true); } })),
         el('td', {}, urlIn),
         el('td', { class: 'actions' },
-          el('button', { class: 'icon', title: 'Open in a new tab', onclick: () => isValidUrl(p.url) && chrome.tabs.create({ url: p.url }) }, '↗'),
+          el('button', { class: 'icon', title: 'Open in a new tab', onclick: () => isValidUrl(p.url) && api.tabs.create({ url: p.url }) }, '↗'),
           el('button', { class: 'icon', title: 'Move up', disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
           el('button', { class: 'icon', title: 'Move down', disabled: i === n - 1, onclick: () => move(i, 1) }, '↓'),
           el('button', { class: 'icon danger', title: 'Remove', onclick: () => { draft.pages.splice(i, 1); renderPages(); setDirty(true); } }, '✕'),
@@ -153,7 +153,7 @@ document.addEventListener('keydown', (e) => {
 });
 window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
-chrome.storage.onChanged.addListener(async (changes, area) => {
+api.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local' || !changes.collections) return;
   const fresh = changes.collections.newValue?.[id];
   if (!fresh) { if (!dirty) load(); return; }

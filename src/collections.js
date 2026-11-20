@@ -1,5 +1,5 @@
 import {
-  getCollections, saveCollections, putCollection, removeCollection, makeCollection, getAll, getPending,
+  api, getCollections, saveCollections, putCollection, removeCollection, makeCollection, getAll, getPending,
   buildExport, parseImport, downloadJson, el, send, plural, openReview,
 } from './common.js';
 
@@ -112,5 +112,5 @@ fileInput.addEventListener('change', async () => {
 });
 
 filter.addEventListener('input', render);
-chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local') render(); });
+api.storage.onChanged.addListener((changes, area) => { if (area === 'local') render(); });
 render();

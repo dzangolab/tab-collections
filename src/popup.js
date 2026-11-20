@@ -1,12 +1,12 @@
 import {
-  getCollections, getAll, getPending, makeCollection, cleanPages, el, send, openManagerPage, plural,
+  api, getCollections, getAll, getPending, makeCollection, cleanPages, el, send, openManagerPage, plural,
 } from './common.js';
 
 const $ = (s) => document.getElementById(s);
 
 async function init() {
   const [cols, sessions, pending, win] = await Promise.all([
-    getCollections(), getAll('sessions', {}), getPending(), chrome.windows.getCurrent({ populate: true }),
+    getCollections(), getAll('sessions', {}), getPending(), api.windows.getCurrent({ populate: true }),
   ]);
   const list = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
   const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
@@ -49,7 +49,7 @@ async function init() {
     e.preventDefault();
     const col = makeCollection({ name: $('saveName').value || `Window saved ${new Date().toLocaleDateString()}`, pages });
     await send({ type: 'saveAndAdopt', windowId: win.id, collection: col });
-    await chrome.tabs.create({ url: chrome.runtime.getURL(`collection.html?id=${encodeURIComponent(col.id)}`), windowId: win.id });
+    await api.tabs.create({ url: api.runtime.getURL(`collection.html?id=${encodeURIComponent(col.id)}`), windowId: win.id });
     window.close();
   });
 }

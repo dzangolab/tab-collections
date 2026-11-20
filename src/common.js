@@ -1,11 +1,16 @@
 // Shared helpers used by the background service worker and all extension pages.
-// All data lives in chrome.storage.local (client side only):
+// All data lives in api.storage.local (client side only):
 //   collections: { [id]: { id, name, description, pages: [{url, title}], createdAt, updatedAt } }
 //   sessions:    { [windowId]: { collectionId, baseline: [url], initial: {tabId: index}, tabs: [{url, title}], openedAt } }
 //   pending:     { [id]: { id, collectionId, collectionName, pages: [{url, title}], closedAt } }
 
-const STORE = chrome.storage.local;
-const OWN_PREFIX = chrome.runtime.getURL('');
+// Cross-browser API handle: Firefox and Safari expose `browser`, Chromium exposes `chrome`.
+// All of them return promises in Manifest V3.
+export const api = globalThis.browser ?? globalThis.chrome;
+
+const STORE = api.storage.local;
+const IS_CHROMIUM = api.runtime.getURL('').startsWith('chrome-extension://');
+const OWN_PREFIX = api.runtime.getURL('');
 
 export async function getAll(key, fallback) {
   const r = await STORE.get(key);
@@ -66,10 +71,14 @@ export function normalizeUrl(raw) {
 export function isIgnorableUrl(u) {
   return (
     !u ||
-    u === 'about:blank' ||
+    u.startsWith('about:') || // about:blank, Firefox about:newtab / about:home
+    u.startsWith('favorites:') || // Safari start page
     u.startsWith('chrome://newtab') ||
     u.startsWith('chrome://new-tab-page') ||
     u.startsWith('chrome-search://') ||
+    /^(edge|brave|opera|vivaldi):\/\/(newtab|startpage)/.test(u) || // other Chromium new-tab pages
+    u.startsWith('chrome://vivaldi-webui/startpage') ||
+    u.startsWith('chrome://startpageshared') ||
     u.startsWith(OWN_PREFIX)
   );
 }
@@ -104,11 +113,35 @@ export function diffPages(before, after) {
   return { added, removed, reordered };
 }
 
+const GLOBE_ICON = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="%23888" stroke-width="1.2">' +
+  '<circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13"/></svg>');
+
+// Chromium has a built-in favicon cache (needs the "favicon" permission). Other browsers
+// fall back to the site's /favicon.ico, and to a generic globe if that fails.
 export function faviconUrl(pageUrl, size = 16) {
-  const u = new URL(chrome.runtime.getURL('/_favicon/'));
-  u.searchParams.set('pageUrl', pageUrl);
-  u.searchParams.set('size', String(size));
-  return u.toString();
+  try {
+    const page = new URL(pageUrl);
+    if (!/^https?:$/.test(page.protocol)) return GLOBE_ICON;
+    if (IS_CHROMIUM) {
+      const u = new URL(api.runtime.getURL('/_favicon/'));
+      u.searchParams.set('pageUrl', pageUrl);
+      u.searchParams.set('size', String(size));
+      return u.toString();
+    }
+    return page.origin + '/favicon.ico';
+  } catch {
+    return GLOBE_ICON;
+  }
+}
+
+export function faviconImg(pageUrl) {
+  const img = document.createElement('img');
+  img.alt = '';
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => { if (img.src !== GLOBE_ICON) img.src = GLOBE_ICON; });
+  img.src = faviconUrl(pageUrl);
+  return img;
 }
 
 // ---------- Pending "collection changed" reviews ----------
@@ -121,14 +154,14 @@ export async function resolvePending(id) {
   await STORE.set({ pending: p });
 }
 
-export function openReview(id) {
-  return chrome.windows.create({
-    url: chrome.runtime.getURL(`prompt.html?id=${encodeURIComponent(id)}`),
-    type: 'popup',
-    width: 540,
-    height: 600,
-    focused: true,
-  });
+export async function openReview(id) {
+  const url = api.runtime.getURL(`prompt.html?id=${encodeURIComponent(id)}`);
+  try {
+    return await api.windows.create({ url, type: 'popup', width: 540, height: 600, focused: true });
+  } catch {
+    // Some browsers (e.g. Safari) don't support popup-type windows.
+    return api.windows.create({ url, focused: true });
+  }
 }
 
 // ---------- Backup / sharing ----------
@@ -215,21 +248,21 @@ export function el(tag, props = {}, ...children) {
 }
 
 export async function send(msg) {
-  const res = await chrome.runtime.sendMessage(msg);
+  const res = await api.runtime.sendMessage(msg);
   if (!res?.ok) throw new Error(res?.error || 'Unknown error');
   return res.result;
 }
 
 // Focus an already-open manager tab, or open a new one.
 export async function openManagerPage(path = 'collections.html') {
-  const target = chrome.runtime.getURL(path);
-  const tabs = await chrome.tabs.query({});
+  const target = api.runtime.getURL(path);
+  const tabs = await api.tabs.query({});
   const existing = tabs.find((t) => t.url === target);
   if (existing) {
-    await chrome.tabs.update(existing.id, { active: true });
-    await chrome.windows.update(existing.windowId, { focused: true });
+    await api.tabs.update(existing.id, { active: true });
+    await api.windows.update(existing.windowId, { focused: true });
   } else {
-    await chrome.tabs.create({ url: target });
+    await api.tabs.create({ url: target });
   }
 }
 

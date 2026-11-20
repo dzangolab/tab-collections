@@ -1,13 +1,13 @@
 import {
-  getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural,
+  api, getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural,
 } from './common.js';
 
 const root = document.getElementById('root');
 const id = new URLSearchParams(location.search).get('id');
 
 async function closeSelf() {
-  const tab = await chrome.tabs.getCurrent();
-  if (tab) chrome.tabs.remove(tab.id);
+  const tab = await api.tabs.getCurrent();
+  if (tab) api.tabs.remove(tab.id);
   else window.close();
 }
 
