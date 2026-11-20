@@ -11,6 +11,7 @@ async function init() {
   ]);
   const list = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
   const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
+  const current = sessions[win.id];
 
   $('list').replaceChildren(
     ...(list.length
@@ -22,6 +23,7 @@ async function init() {
               try { await send({ type: 'open', id: c.id }); window.close(); } catch (e) { alert(e.message); }
             },
           },
+          el('span', { class: 'mark' }, c.id === current?.collectionId ? '*' : ''),
           el('span', { class: 'nm' }, c.name),
           openIds.has(c.id) && el('span', { class: 'pill' }, 'Open'),
           el('span', { class: 'n' }, c.pages.length)))
@@ -37,7 +39,6 @@ async function init() {
   );
 
   // What "Save" captures: selected tabs > current Vivaldi workspace > whole window.
-  const current = sessions[win.id];
   const ordered = win.tabs.sort((a, b) => a.index - b.index);
   const toPages = (tabs) => cleanPages(tabs.map((t) => ({ url: t.url || t.pendingUrl || '', title: t.title || '' })));
   const highlighted = ordered.filter((t) => t.highlighted);
