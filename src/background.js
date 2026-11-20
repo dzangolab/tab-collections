@@ -47,11 +47,18 @@ async function openCollection(id) {
     }
   }
 
-  const urls = col.pages.map((p) => p.url).filter(Boolean);
+  // Undecided changes from when the window was last closed? Reopen it as it was last; the window
+  // then shows as drifted from the saved collection until the user updates or restores it.
+  const drift = Object.values(await getAll('pending', {})).find((p) => !p.live && p.collectionId === id);
+  const urls = (drift ? drift.pages : col.pages).map((p) => p.url).filter(Boolean);
   const win = await api.windows.create(urls.length ? { url: urls, focused: true } : { focused: true });
 
   await withSessions(async (ss) => {
     const tabs = sortTabs(await api.tabs.query({ windowId: win.id }));
+    if (drift) {
+      ss[win.id] = { collectionId: id, baseline: col.pages.map((p) => p.url), initial: {}, openedAt: Date.now(), tabs: tabs.map(tabToPage) };
+      return;
+    }
     const baseline = urls.slice();
     const initial = {};
     tabs.forEach((t, i) => {
@@ -62,7 +69,18 @@ async function openCollection(id) {
     });
     ss[win.id] = { collectionId: id, baseline, initial, openedAt: Date.now(), tabs: tabs.map(tabToPage) };
   });
+  if (drift) await dropPending((p) => p.id === drift.id);
   return { opened: true, windowId: win.id };
+}
+
+// Removes the pending changes `match` selects, and closes their prompts if open.
+async function dropPending(match) {
+  const prompts = await withPending((p) => {
+    const out = [];
+    for (const [k, v] of Object.entries(p)) if (match(v)) { out.push(v.promptWindowId); delete p[k]; }
+    return out;
+  });
+  for (const w of prompts) if (w != null) api.windows.remove(w).catch(() => {});
 }
 
 // Start tracking an existing window as a collection (used by "Save this window", and after saving
@@ -122,9 +140,14 @@ api.tabs.onReplaced?.addListener(async (addedId) => {
 // ---------- Window closed: compare and ask ----------
 
 api.windows.onRemoved.addListener(async (windowId) => {
-  // A prompt closed without an answer counts as "Keep unchanged": forget its change.
+  // A prompt closed without an answer leaves the changes of a closed window undecided; those of a
+  // window that is still open are worked out again from its tabs, so forget them.
   await withPending((p) => {
-    for (const [k, v] of Object.entries(p)) if (v.promptWindowId === windowId) delete p[k];
+    for (const [k, v] of Object.entries(p)) {
+      if (v.promptWindowId !== windowId) continue;
+      if (v.live) delete p[k];
+      else v.promptWindowId = null;
+    }
   });
 
   const s = await withSessions((ss) => {
@@ -135,9 +158,11 @@ api.windows.onRemoved.addListener(async (windowId) => {
   if (s) await reviewSession(s, { windowId });
 });
 
-// Opens the "Update collection?" prompt when a session's tabs differ from its collection.
-// `live` means the window is still open: the user asked from the toolbar popup.
-async function reviewSession(s, { live = false, windowId = null } = {}) {
+// Records a session's changes when its tabs differ from its collection, and opens the prompt.
+// `live`: the window is still open (the user asked from the popup or a page); its changes are kept
+// only while the prompt is open. Otherwise the window has closed: its changes stay undecided until
+// the user updates or restores the collection. `prompt: false` records them without a prompt.
+async function reviewSession(s, { live = false, windowId = null, prompt = true } = {}) {
   const col = await getCollection(s.collectionId);
   if (!col) return; // collection was deleted while open
 
@@ -145,27 +170,24 @@ async function reviewSession(s, { live = false, windowId = null } = {}) {
   if (!hasChanged(s, col, nowPages)) return;
 
   const id = newId();
-  const replaced = await withPending((p) => {
-    // A newer prompt for the same window replaces an unanswered earlier one.
-    const old = [];
-    if (windowId != null) {
-      for (const [k, v] of Object.entries(p)) if (v.windowId === windowId) { old.push(v.promptWindowId); delete p[k]; }
-    }
+  // Newer changes replace earlier ones: from the same window, and for a closed window, any earlier
+  // undecided changes of the same collection.
+  await dropPending((v) => (windowId != null && v.windowId === windowId) || (!live && !v.live && v.collectionId === col.id));
+  await withPending((p) => {
     p[id] = {
       id, collectionId: col.id, collectionName: col.name, pages: nowPages, closedAt: Date.now(),
       baseline: (s.baseline || []).length === col.pages.length ? s.baseline : null,
       live, windowId,
     };
-    return old;
   });
-  for (const w of replaced) if (w != null) api.windows.remove(w).catch(() => {});
+  if (!prompt) return;
 
-  let prompt;
-  try { prompt = await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
+  let win;
+  try { win = await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
   await withPending((p) => {
     if (!p[id]) return;
-    if (prompt?.id == null) delete p[id]; // no prompt to answer: keep unchanged
-    else p[id].promptWindowId = prompt.id;
+    if (win?.id != null) p[id].promptWindowId = win.id;
+    else if (live) delete p[id]; // no prompt to answer
   });
 }
 
@@ -199,6 +221,16 @@ async function driftStatus() {
   return out;
 }
 
+// Update a collection from the tabs of its open window, which then counts as unchanged.
+async function updateFromWindow(windowId) {
+  const state = await windowState(windowId);
+  if (!state) throw new Error('This window is not a collection');
+  const pages = state.pages.map((p) => ({ url: p.url, title: p.title }));
+  await putCollection({ ...state.col, pages });
+  await adoptWindow(windowId, state.col.id, pages.map((p) => p.url));
+  await dropPending((v) => v.live && v.windowId === windowId);
+}
+
 // The toolbar popup's button: the same prompt as closing the window, while it stays open.
 async function reviewWindow(windowId) {
   await refresh(windowId);
@@ -207,24 +239,38 @@ async function reviewWindow(windowId) {
   await reviewSession(s, { live: true, windowId });
 }
 
-// Windows that closed without a prompt (browser quit, extension reloaded) count as "Keep unchanged".
+// Windows that closed without a prompt (browser quit, extension reloaded) keep their changes as
+// undecided, without a prompt.
 
-// After a browser restart, window ids are reused, so every tracked window is gone,
-// and so is every prompt.
+// After a browser restart, window ids are reused, so every tracked window is gone, and so is
+// every prompt.
 api.runtime.onStartup.addListener(async () => {
-  await withSessions((ss) => { for (const k of Object.keys(ss)) delete ss[k]; });
-  await withPending((p) => { for (const k of Object.keys(p)) delete p[k]; });
+  const old = await withSessions((ss) => {
+    const vals = Object.values(ss);
+    for (const k of Object.keys(ss)) delete ss[k];
+    return vals;
+  });
+  await dropPending((v) => v.live);
+  await withPending((p) => { for (const v of Object.values(p)) v.promptWindowId = null; });
+  for (const s of old) await reviewSession(s, { prompt: false });
 });
 
 // After install / update / reload, drop sessions and prompts whose windows no longer exist.
 api.runtime.onInstalled.addListener(async () => {
   const gone = async (w) => { try { await api.windows.get(Number(w)); return false; } catch { return true; } };
-  await withSessions(async (ss) => {
-    for (const w of Object.keys(ss)) if (await gone(w)) delete ss[w];
+  const stale = await withSessions(async (ss) => {
+    const out = [];
+    for (const [w, s] of Object.entries(ss)) if (await gone(w)) { out.push(s); delete ss[w]; }
+    return out;
   });
   await withPending(async (p) => {
-    for (const [k, v] of Object.entries(p)) if (v.promptWindowId == null || await gone(v.promptWindowId)) delete p[k];
+    for (const [k, v] of Object.entries(p)) {
+      const promptGone = v.promptWindowId == null || await gone(v.promptWindowId);
+      if (v.live && promptGone) delete p[k];
+      else if (promptGone) v.promptWindowId = null;
+    }
   });
+  for (const s of stale) await reviewSession(s, { prompt: false });
   await api.action.setBadgeText({ text: '' }); // clear the count earlier versions showed
 });
 
@@ -242,6 +288,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case 'driftStatus': return driftStatus();
       case 'reviewWindow': return reviewWindow(msg.windowId);
+      case 'updateFromWindow': return updateFromWindow(msg.windowId);
       case 'windowStatus': {
         const state = await windowState(msg.windowId);
         return state && { changed: state.changed, name: state.col.name };

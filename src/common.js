@@ -2,8 +2,10 @@
 // All data lives in api.storage.local (client side only):
 //   collections: { [id]: { id, name, description, pages: [{url, title}], createdAt, updatedAt } }
 //   sessions:    { [windowId]: { collectionId, baseline: [url], initial: {tabId: index}, tabs: [{url, title}], openedAt } }
-//   pending:     { [id]: { id, collectionId, collectionName, pages: [{url, title}], closedAt, promptWindowId } }
-//                (only while its "Update collection?" prompt is open)
+//   pending:     { [id]: { id, collectionId, collectionName, pages: [{url, title}], closedAt, baseline,
+//                          live, windowId, promptWindowId } }
+//                changes the user hasn't decided on: a closed window's (live: false) until it is
+//                updated or restored; an open window's (live: true) only while its prompt is open
 //   settings:    { closeDefault: 'keep' | 'update' }
 
 // Cross-browser API handle: Firefox and Safari expose `browser`, Chromium exposes `chrome`.
@@ -40,6 +42,9 @@ export async function removeCollection(id) {
   const all = await getCollections();
   delete all[id];
   await saveCollections(all);
+  const pending = await getPending();
+  for (const [k, v] of Object.entries(pending)) if (v.collectionId === id) delete pending[k];
+  await STORE.set({ pending });
 }
 
 export function newId() {
@@ -154,6 +159,20 @@ export async function resolvePending(id) {
   const p = await getPending();
   delete p[id];
   await STORE.set({ pending: p });
+}
+
+// A closed window's undecided changes, by collection id.
+export async function closedDrift() {
+  const out = {};
+  for (const p of Object.values(await getPending())) if (!p.live) out[p.collectionId] = p;
+  return out;
+}
+
+// "Update": the collection takes the closed window's tabs.
+export async function updateFromPending(pending) {
+  const col = await getCollection(pending.collectionId);
+  if (col) await putCollection({ ...col, pages: pending.pages.map((p) => ({ url: p.url, title: p.title })) });
+  await resolvePending(pending.id);
 }
 
 export async function openReview(id) {
@@ -290,6 +309,55 @@ export function icon(name, size = 16) {
   path.setAttribute('d', ICONS[name]);
   svg.append(path);
   return svg;
+}
+
+// The strip shown under a collection whose window's tabs have changed. `onRestore` only for a
+// closed window: the extension never closes tabs of an open one.
+export function driftStrip({ onDetails, onUpdate, onRestore }) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const warn = document.createElementNS(ns, 'svg');
+  warn.setAttribute('viewBox', '0 0 16 14');
+  warn.setAttribute('width', '16');
+  warn.setAttribute('height', '14');
+  warn.setAttribute('aria-hidden', 'true');
+  for (const [d, attrs] of [
+    ['M8 .8 15.4 13.2H.6Z', { fill: '#f5b800', stroke: '#b98a00', 'stroke-linejoin': 'round' }],
+    ['M8 5v4M8 10.6v.9', { fill: 'none', stroke: '#3a2a00', 'stroke-width': '1.8', 'stroke-linecap': 'round' }],
+  ]) {
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', d);
+    for (const [k, v] of Object.entries(attrs)) path.setAttribute(k, v);
+    warn.append(path);
+  }
+  return el('div', { class: 'drift-strip' },
+    warn,
+    el('span', { class: 'drift-msg' }, onRestore
+      ? 'The tabs in this collection’s window changed before it was closed'
+      : 'The tabs in this collection’s window have changed'),
+    el('button', { onclick: onDetails }, 'Details'),
+    el('button', { class: 'primary', onclick: onUpdate }, 'Update'),
+    onRestore && el('button', { onclick: onRestore }, 'Restore'));
+}
+
+// The drift strip for a collection, if its window's tabs have changed: undecided changes of a
+// closed window (`closed`, from closedDrift()), or its open window's tabs differing from it
+// (`live`, from the driftStatus message). `notify` shows a short message.
+export function collectionDrift(id, closed, live, notify) {
+  const failed = (e) => notify(e.message);
+  const pending = closed[id];
+  if (pending) {
+    return driftStrip({
+      onDetails: () => openReview(pending.id).catch(failed),
+      onUpdate: () => updateFromPending(pending).then(() => notify('Collection updated'), failed),
+      onRestore: () => resolvePending(pending.id).then(() => notify('Collection restored'), failed),
+    });
+  }
+  const w = live[id];
+  if (!w?.changed) return null;
+  return driftStrip({
+    onDetails: () => send({ type: 'reviewWindow', windowId: w.windowId }).catch(failed),
+    onUpdate: () => send({ type: 'updateFromWindow', windowId: w.windowId }).then(() => notify('Collection updated'), failed),
+  });
 }
 
 export async function send(msg) {
