@@ -1,13 +1,13 @@
 import {
-  api, getCollections, getAll, getPending, makeCollection, putCollection, cleanPages, el, send, openManagerPage, plural,
+  api, getCollections, getAll, makeCollection, putCollection, cleanPages, el, send, openManagerPage, plural,
   vivaldiData, hasVivaldiData, workspaceKey, suggestName,
 } from './common.js';
 
 const $ = (s) => document.getElementById(s);
 
 async function init() {
-  const [cols, sessions, pending, win] = await Promise.all([
-    getCollections(), getAll('sessions', {}), getPending(), api.windows.getCurrent({ populate: true }),
+  const [cols, sessions, win] = await Promise.all([
+    getCollections(), getAll('sessions', {}), api.windows.getCurrent({ populate: true }),
   ]);
   const list = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
   const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
@@ -52,14 +52,6 @@ async function init() {
       alert(e.message);
     }
   }
-
-  const nPending = Object.keys(pending).length;
-  $('pending').replaceChildren(
-    nPending
-      ? el('div', { class: 'banner' }, `${plural(nPending, 'change')} to review. `,
-          el('a', { href: '#', onclick: (e) => { e.preventDefault(); openManagerPage().then(() => window.close()); } }, 'Review'))
-      : '',
-  );
 
   // What "Save" captures: selected tabs > current Vivaldi workspace > whole window.
   const ordered = win.tabs.sort((a, b) => a.index - b.index);

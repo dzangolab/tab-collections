@@ -1,12 +1,11 @@
 import {
-  api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll, getPending,
-  buildExport, parseImport, downloadJson, el, send, plural, openReview,
+  api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll,
+  buildExport, parseImport, downloadJson, el, send, plural,
 } from './common.js';
 
 const rows = document.getElementById('rows');
 const empty = document.getElementById('empty');
 const filter = document.getElementById('filter');
-const pendingBox = document.getElementById('pending');
 const toastEl = document.getElementById('toast');
 
 function toast(msg) {
@@ -17,7 +16,7 @@ function toast(msg) {
 }
 
 async function render() {
-  const [cols, sessions, pending] = await Promise.all([getCollections(), getAll('sessions', {}), getPending()]);
+  const [cols, sessions] = await Promise.all([getCollections(), getAll('sessions', {})]);
   const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
   const q = filter.value.trim().toLowerCase();
   const all = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
@@ -55,23 +54,6 @@ async function render() {
   if (all.length && !list.length) {
     rows.append(el('tr', {}, el('td', { colspan: 4, class: 'muted' }, 'No collections match the filter.')));
   }
-
-  const pend = Object.values(pending).filter((p) => cols[p.collectionId]);
-  pendingBox.replaceChildren(
-    pend.length
-      ? el('div', { class: 'banner' },
-          el('strong', {}, `${plural(pend.length, 'closed window')} with changed tabs to review`),
-          el('ul', {},
-            ...pend.map((p) =>
-              el('li', {},
-                `“${cols[p.collectionId].name}” — closed ${new Date(p.closedAt).toLocaleString()} `,
-                el('a', { href: '#', onclick: (e) => { e.preventDefault(); openReview(p.id); } }, 'Review'),
-              ),
-            ),
-          ),
-        )
-      : '',
-  );
 }
 
 document.getElementById('new').addEventListener('click', async () => {

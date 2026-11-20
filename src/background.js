@@ -122,6 +122,11 @@ api.tabs.onReplaced?.addListener(async (addedId) => {
 // ---------- Window closed: compare and ask ----------
 
 api.windows.onRemoved.addListener(async (windowId) => {
+  // A prompt closed without an answer counts as "Keep unchanged": forget its change.
+  await withPending((p) => {
+    for (const [k, v] of Object.entries(p)) if (v.promptWindowId === windowId) delete p[k];
+  });
+
   const s = await withSessions((ss) => {
     const found = ss[windowId];
     if (found) delete ss[windowId];
@@ -140,18 +145,28 @@ async function reviewSession(s, { live = false, windowId = null } = {}) {
   if (!hasChanged(s, col, nowPages)) return;
 
   const id = newId();
-  await withPending((p) => {
+  const replaced = await withPending((p) => {
     // A newer prompt for the same window replaces an unanswered earlier one.
+    const old = [];
     if (windowId != null) {
-      for (const [k, v] of Object.entries(p)) if (v.windowId === windowId) delete p[k];
+      for (const [k, v] of Object.entries(p)) if (v.windowId === windowId) { old.push(v.promptWindowId); delete p[k]; }
     }
     p[id] = {
       id, collectionId: col.id, collectionName: col.name, pages: nowPages, closedAt: Date.now(),
       baseline: (s.baseline || []).length === col.pages.length ? s.baseline : null,
       live, windowId,
     };
+    return old;
   });
-  try { await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
+  for (const w of replaced) if (w != null) api.windows.remove(w).catch(() => {});
+
+  let prompt;
+  try { prompt = await openReview(id); } catch (e) { console.warn('Could not open review window', e); }
+  await withPending((p) => {
+    if (!p[id]) return;
+    if (prompt?.id == null) delete p[id]; // no prompt to answer: keep unchanged
+    else p[id].promptWindowId = prompt.id;
+  });
 }
 
 // Whether a window's tabs differ from both the URLs it opened with and the saved collection.
@@ -182,39 +197,25 @@ async function reviewWindow(windowId) {
   await reviewSession(s, { live: true, windowId });
 }
 
-// After a browser restart, window ids are reused, so every tracked window is gone.
+// Windows that closed without a prompt (browser quit, extension reloaded) count as "Keep unchanged".
+
+// After a browser restart, window ids are reused, so every tracked window is gone,
+// and so is every prompt.
 api.runtime.onStartup.addListener(async () => {
-  const old = await withSessions((ss) => {
-    const vals = Object.values(ss);
-    for (const k of Object.keys(ss)) delete ss[k];
-    return vals;
-  });
-  for (const s of old) await reviewSession(s);
-  updateBadge();
+  await withSessions((ss) => { for (const k of Object.keys(ss)) delete ss[k]; });
+  await withPending((p) => { for (const k of Object.keys(p)) delete p[k]; });
 });
 
-// After install / update / reload, drop sessions whose windows no longer exist.
+// After install / update / reload, drop sessions and prompts whose windows no longer exist.
 api.runtime.onInstalled.addListener(async () => {
-  const stale = await withSessions(async (ss) => {
-    const out = [];
-    for (const [w, s] of Object.entries(ss)) {
-      try { await api.windows.get(Number(w)); } catch { out.push(s); delete ss[w]; }
-    }
-    return out;
+  const gone = async (w) => { try { await api.windows.get(Number(w)); return false; } catch { return true; } };
+  await withSessions(async (ss) => {
+    for (const w of Object.keys(ss)) if (await gone(w)) delete ss[w];
   });
-  for (const s of stale) await reviewSession(s);
-  updateBadge();
-});
-
-// ---------- Badge shows unresolved reviews ----------
-
-async function updateBadge() {
-  const n = Object.keys(await getAll('pending', {})).length;
-  await api.action.setBadgeText({ text: n ? String(n) : '' });
-  if (n) await api.action.setBadgeBackgroundColor({ color: '#d97706' });
-}
-api.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.pending) updateBadge();
+  await withPending(async (p) => {
+    for (const [k, v] of Object.entries(p)) if (v.promptWindowId == null || await gone(v.promptWindowId)) delete p[k];
+  });
+  await api.action.setBadgeText({ text: '' }); // clear the count earlier versions showed
 });
 
 // ---------- Messages from pages ----------

@@ -2,7 +2,8 @@
 // All data lives in api.storage.local (client side only):
 //   collections: { [id]: { id, name, description, pages: [{url, title}], createdAt, updatedAt } }
 //   sessions:    { [windowId]: { collectionId, baseline: [url], initial: {tabId: index}, tabs: [{url, title}], openedAt } }
-//   pending:     { [id]: { id, collectionId, collectionName, pages: [{url, title}], closedAt } }
+//   pending:     { [id]: { id, collectionId, collectionName, pages: [{url, title}], closedAt, promptWindowId } }
+//                (only while its "Update collection?" prompt is open)
 
 // Cross-browser API handle: Firefox and Safari expose `browser`, Chromium exposes `chrome`.
 // All of them return promises in Manifest V3.
