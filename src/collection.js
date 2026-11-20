@@ -1,6 +1,6 @@
 import {
   api, getCollection, putCollection, removeCollection, normalizeUrl, faviconUrl, faviconImg, buildExport, downloadJson,
-  slug, el, send, plural,
+  slug, el, icon, send, plural,
 } from './common.js';
 
 const params = new URLSearchParams(location.search);
@@ -13,6 +13,13 @@ const pagesBody = $('pages');
 let saved = null; // last saved version
 let draft = null; // what the user is editing
 let dirty = false;
+let editing = false; // the name/description form is showing
+let dragFrom = null; // index of the page being dragged
+
+$('back').prepend(icon('back'));
+$('editToggle').append(icon('edit'));
+$('exportOne').append(icon('export'));
+$('delete').append(icon('delete'));
 
 function toast(msg) {
   const t = $('toast');
@@ -29,10 +36,36 @@ function isValidUrl(u) {
 function setDirty(v) {
   dirty = v;
   document.body.classList.toggle('dirty', v);
-  $('save').disabled = !v;
-  $('revert').disabled = !v;
-  $('status').textContent = v ? 'Unsaved changes' : 'All changes saved';
+  $('savebar').hidden = !v;
   if (!v) $('external').hidden = true;
+}
+
+// The page title and the description under it follow the draft.
+function renderHead() {
+  $('title').textContent = draft.name.trim() || 'Untitled collection';
+  $('descText').textContent = draft.description;
+  $('descText').hidden = editing || !draft.description.trim();
+}
+
+function setEditing(v) {
+  editing = v;
+  $('details').hidden = !v;
+  $('editToggle').setAttribute('aria-pressed', String(v));
+  renderHead();
+}
+
+// dd mmm yyyy hh:mm
+function formatDate(ms) {
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())} ${d.toLocaleString('en', { month: 'short' })} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderDates() {
+  const parts = [];
+  if (saved.createdAt) parts.push(`Created at: ${formatDate(saved.createdAt)}`);
+  if (saved.updatedAt) parts.push(`Last updated at: ${formatDate(saved.updatedAt)}`);
+  $('dates').textContent = parts.join(' · ');
 }
 
 async function load() {
@@ -40,7 +73,7 @@ async function load() {
   if (!saved) {
     $('editor').hidden = true;
     $('notFound').hidden = false;
-    document.querySelectorAll('.topbar button').forEach((b) => (b.disabled = true));
+    document.querySelectorAll('.toolbar button').forEach((b) => (b.disabled = true));
     return;
   }
   draft = structuredClone(saved);
@@ -48,21 +81,24 @@ async function load() {
   nameIn.value = draft.name;
   descIn.value = draft.description;
   document.title = `${draft.name} — Collection`;
+  renderHead();
+  renderDates();
   renderPages();
   setDirty(false);
-  if (params.get('new')) { nameIn.select(); nameIn.focus(); }
+  if (params.get('new')) { setEditing(true); nameIn.select(); nameIn.focus(); }
 }
 
 function renderPages() {
   const n = draft.pages.length;
-  $('count').textContent = `(${plural(n, 'page')})`;
+  $('count').textContent = plural(n, 'web page');
   $('noPages').hidden = n > 0;
   pagesBody.replaceChildren(
     ...draft.pages.map((p, i) => {
       const fav = faviconImg(p.url);
+      if (isValidUrl(p.url)) fav.src = faviconUrl(p.url, 32);
       const urlIn = el('input', {
-        type: 'text', value: p.url,
-        class: isValidUrl(p.url) ? '' : 'invalid',
+        type: 'text', value: p.url, 'aria-label': 'Page URL',
+        class: isValidUrl(p.url) ? 'url-in' : 'url-in invalid',
         oninput: (e) => {
           p.url = e.target.value;
           e.target.classList.toggle('invalid', !isValidUrl(normalizeUrl(p.url)));
@@ -71,35 +107,97 @@ function renderPages() {
         onchange: (e) => {
           p.url = normalizeUrl(e.target.value);
           e.target.value = p.url;
-          if (isValidUrl(p.url)) fav.src = faviconUrl(p.url);
+          if (isValidUrl(p.url)) fav.src = faviconUrl(p.url, 32);
         },
       });
-      return el('tr', {},
-        el('td', { class: 'idx' }, i + 1),
-        el('td', { class: 'fav' }, fav),
-        el('td', { class: 'title' },
-          el('input', { type: 'text', value: p.title, placeholder: 'Untitled', oninput: (e) => { p.title = e.target.value; setDirty(true); } })),
-        el('td', {}, urlIn),
-        el('td', { class: 'actions' },
-          el('button', { class: 'icon', title: 'Open in a new tab', onclick: () => isValidUrl(p.url) && api.tabs.create({ url: p.url }) }, '↗'),
-          el('button', { class: 'icon', title: 'Move up', disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
-          el('button', { class: 'icon', title: 'Move down', disabled: i === n - 1, onclick: () => move(i, 1) }, '↓'),
-          el('button', { class: 'icon danger', title: 'Remove', onclick: () => { draft.pages.splice(i, 1); renderPages(); setDirty(true); } }, '✕'),
-        ),
+      const card = el('div', {
+        class: 'page-card',
+        ondragstart: (e) => {
+          dragFrom = i;
+          card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(i));
+        },
+        ondragend: () => {
+          card.draggable = false;
+          card.classList.remove('dragging');
+          clearDropMarks();
+          dragFrom = null;
+        },
+        ondragover: (e) => {
+          if (dragFrom === null) return;
+          e.preventDefault();
+          clearDropMarks();
+          card.classList.add(dropsAfter(card, e) ? 'drop-after' : 'drop-before');
+        },
+        ondrop: (e) => {
+          e.preventDefault();
+          if (dragFrom === null) return;
+          let to = i + (dropsAfter(card, e) ? 1 : 0);
+          if (dragFrom < to) to -= 1;
+          reorder(dragFrom, to);
+        },
+      },
+      // The card is only draggable while the handle is held, so text in its fields stays selectable.
+      el('button', {
+        type: 'button',
+        class: 'drag-handle',
+        title: 'Drag to reorder',
+        'aria-label': `Reorder “${p.title || p.url}”: drag it, or use the up and down arrow keys`,
+        onmousedown: () => { card.draggable = true; },
+        onmouseup: () => { card.draggable = false; },
+        onkeydown: (e) => {
+          const d = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+          if (!d || i + d < 0 || i + d >= n) return;
+          e.preventDefault();
+          reorder(i, i + d);
+          pagesBody.children[i + d]?.querySelector('.drag-handle')?.focus();
+        },
+      }, icon('drag')),
+      el('span', { class: 'fav-tile' }, fav),
+      el('div', { class: 'page-fields' },
+        el('input', {
+          type: 'text', class: 'title-in', value: p.title, placeholder: 'Untitled', 'aria-label': 'Page title',
+          oninput: (e) => { p.title = e.target.value; setDirty(true); },
+        }),
+        urlIn),
+      el('button', {
+        class: 'icon-btn ghost', title: 'Open in a new tab', 'aria-label': 'Open in a new tab',
+        onclick: () => isValidUrl(p.url) && api.tabs.create({ url: p.url }),
+      }, icon('external')),
+      el('button', {
+        class: 'icon-btn ghost', title: 'Remove page', 'aria-label': 'Remove page',
+        onclick: () => { draft.pages.splice(i, 1); renderPages(); setDirty(true); },
+      }, icon('delete')),
       );
+      return card;
     }),
   );
 }
 
-function move(i, d) {
-  const [p] = draft.pages.splice(i, 1);
-  draft.pages.splice(i + d, 0, p);
+const dropsAfter = (card, e) => {
+  const r = card.getBoundingClientRect();
+  return e.clientY > r.top + r.height / 2;
+};
+
+function clearDropMarks() {
+  pagesBody.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
+}
+
+function reorder(from, to) {
+  if (from === to) return;
+  const [p] = draft.pages.splice(from, 1);
+  draft.pages.splice(to, 0, p);
   renderPages();
   setDirty(true);
 }
 
-nameIn.addEventListener('input', () => { draft.name = nameIn.value; setDirty(true); });
-descIn.addEventListener('input', () => { draft.description = descIn.value; setDirty(true); });
+nameIn.addEventListener('input', () => { draft.name = nameIn.value; renderHead(); setDirty(true); });
+descIn.addEventListener('input', () => { draft.description = descIn.value; renderHead(); setDirty(true); });
+$('editToggle').addEventListener('click', () => {
+  setEditing(!editing);
+  if (editing) nameIn.focus();
+});
 
 $('addForm').addEventListener('submit', (e) => {
   e.preventDefault();
