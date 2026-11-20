@@ -15,12 +15,6 @@ Tab Collections isn't listed in any extension store yet. Once it is, install it 
 
 Until then, install it from code: see [Installing locally from code](#installing-locally-from-code).
 
-## Vivaldi workspaces
-- **Collections page → From Vivaldi workspaces…** lists the workspaces that have open tabs. Tick the ones you want, name each one, then click **Create collections**.
-- **Toolbar popup** in Vivaldi: **Save** captures only the current workspace's tabs (not every tab in the window), when Vivaldi exposes the workspace field described below.
-- Vivaldi has no official workspaces API. This uses a hidden per-tab field (`vivExtData.workspaceId`) that Vivaldi has exposed in many versions. Workspace names aren't available, so each collection gets a suggested name (its main sites) that you can edit.
-- If your Vivaldi version doesn't expose that field, the button stays hidden, and extensions can't tell which workspace a tab is in. The popup's **Save** then covers the tabs of every workspace in the window, and its tab count includes them all (for example, "Save this window's 44 tabs" when the current workspace shows only 3). To save one workspace, open it, select its tabs (click the first tab, Shift-click the last), then use the popup's **Save**. It saves just the selected tabs. This works in every browser.
-
 ## Using it
 - **Toolbar popup:** open a collection, go to *Manage*, or save tabs as a collection: the selected tabs if you've selected several, otherwise the whole window.
 - **Collections page:** a table of collections with description and page count; create, open, delete, import, export.
@@ -29,6 +23,12 @@ Until then, install it from code: see [Installing locally from code](#installing
 - **Close the window:** if the tabs changed, you're asked to **Update**, **Keep unchanged**, or **Save as new**. Redirects during the first page load and empty new-tab pages don't count as changes. Closing the prompt without choosing, or switching to another window (which closes it), counts as **Keep unchanged**, and so does a window that closes without a prompt, such as when the browser quits.
 - **Settings** (on the Collections page, also the extension's Options page): *Default behaviour when closing a window which has drifted from its collection* picks which prompt button is focused and highlighted, **Update** or **Keep unchanged** (the default).
 - **Storage:** everything is kept locally in the browser (`storage.local`). Export/Import JSON files to back up or share. Collections are not synced between browsers, but an export from one browser imports into any other.
+
+## Vivaldi workspaces
+- **Collections page → From Vivaldi workspaces…** lists the workspaces that have open tabs. Tick the ones you want, name each one, then click **Create collections**.
+- **Toolbar popup** in Vivaldi: **Save** captures only the current workspace's tabs (not every tab in the window), when Vivaldi exposes the workspace field described below.
+- Vivaldi has no official workspaces API. This uses a hidden per-tab field (`vivExtData.workspaceId`) that Vivaldi has exposed in many versions. Workspace names aren't available, so each collection gets a suggested name (its main sites) that you can edit.
+- If your Vivaldi version doesn't expose that field, the button stays hidden, and extensions can't tell which workspace a tab is in. The popup's **Save** then covers the tabs of every workspace in the window, and its tab count includes them all (for example, "Save this window's 44 tabs" when the current workspace shows only 3). To save one workspace, open it, select its tabs (click the first tab, Shift-click the last), then use the popup's **Save**. It saves just the selected tabs. This works in every browser.
 
 ## Contributing
 
