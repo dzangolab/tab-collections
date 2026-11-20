@@ -83,9 +83,20 @@ async function init() {
 }
 
 async function showCollectionWindow(windowId) {
-  const status = await send({ type: 'windowStatus', windowId });
-  if (!status) return;
   $('collectionSection').hidden = false;
+  let status;
+  try {
+    status = await send({ type: 'windowStatus', windowId });
+  } catch (e) {
+    $('collectionMsg').textContent = `Could not check this window: ${e.message}`;
+    $('saveAsForm').querySelector('button').disabled = true;
+    return;
+  }
+  if (!status) {
+    $('collectionMsg').textContent = 'This window is no longer linked to its collection.';
+    $('saveAsForm').querySelector('button').disabled = true;
+    return;
+  }
   $('collectionMsg').textContent = status.changed
     ? `The contents of the “${status.name}” window have changed. Do you want to update the collection?`
     : `This window is the collection “${status.name}”.`;
