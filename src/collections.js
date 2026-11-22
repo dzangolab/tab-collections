@@ -105,7 +105,7 @@ fileInput.addEventListener('change', async () => {
     const { collections: incoming, skipped } = parseImport(await file.text());
     if (!incoming.length) {
       return alert(skipped
-        ? `Nothing to import: the ${plural(skipped, 'collection')} in “${file.name}” ${skipped === 1 ? "has" : "have"} no pages.`
+        ? `Nothing to import: the ${plural(skipped, 'collection')} in “${file.name}” ${skipped === 1 ? 'has' : 'have'} no pages.`
         : 'No collections found in this file.');
     }
     const existing = await getCollections();

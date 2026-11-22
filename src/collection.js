@@ -1,10 +1,13 @@
 import {
-  api, getCollection, putCollection, removeCollection, normalizeUrl, faviconUrl, faviconImg, buildExport, downloadJson,
+  api, getCollection, putCollection, removeCollection, makeCollection, normalizeUrl, faviconUrl, faviconImg, buildExport, downloadJson,
   slug, el, icon, send, plural, closedDrift, collectionDrift,
 } from './common.js';
 
 const params = new URLSearchParams(location.search);
-const id = params.get('id');
+let id = params.get('id');
+// No id: a new collection, stored only by its first save (which needs a page), so leaving the page
+// without saving leaves nothing behind.
+let isNew = !id;
 const $ = (s) => document.getElementById(s);
 const nameIn = $('name');
 const descIn = $('description');
@@ -36,7 +39,10 @@ function isValidUrl(u) {
 function setDirty(v) {
   dirty = v;
   document.body.classList.toggle('dirty', v);
-  $('savebar').hidden = !v;
+  // A new collection keeps its Save button showing: nothing is stored until it is used.
+  $('savebar').hidden = !v && !isNew;
+  $('status').textContent = isNew ? 'Not saved yet' : 'Unsaved changes';
+  $('revert').hidden = isNew;
   if (!v) $('external').hidden = true;
 }
 
@@ -69,6 +75,7 @@ async function renderDrift() {
 }
 
 function renderDates() {
+  if (!saved) { $('dates').textContent = 'Not saved yet'; return; }
   const parts = [];
   if (saved.createdAt) parts.push(`Created at: ${formatDate(saved.createdAt)}`);
   if (saved.updatedAt) parts.push(`Last updated at: ${formatDate(saved.updatedAt)}`);
@@ -76,30 +83,37 @@ function renderDates() {
 }
 
 async function load() {
-  saved = await getCollection(id);
-  if (!saved) {
+  saved = isNew ? null : await getCollection(id);
+  if (!isNew && !saved) {
     $('editor').hidden = true;
     $('notFound').hidden = false;
     document.querySelectorAll('.toolbar button').forEach((b) => (b.disabled = true));
-    return;
+    return false;
   }
-  draft = structuredClone(saved);
+  draft = saved ? structuredClone(saved) : makeCollection({ name: 'New collection' });
+  id = draft.id;
   $('editor').hidden = false;
+  $('notFound').hidden = true;
+  // Opening, exporting or deleting need a stored collection.
+  for (const b of ['open', 'exportOne', 'delete']) $(b).hidden = isNew;
   nameIn.value = draft.name;
   descIn.value = draft.description;
-  document.title = `${draft.name} — Collection`;
+  document.title = isNew ? 'New collection' : `${draft.name} — Collection`;
   renderHead();
   renderDates();
-  renderDrift();
+  if (saved) renderDrift();
   renderPages();
   setDirty(false);
-  if (params.get('new')) { setEditing(true); nameIn.select(); nameIn.focus(); }
+  return true;
 }
 
 function renderPages() {
   const n = draft.pages.length;
   $('count').textContent = plural(n, 'web page');
   $('noPages').hidden = n > 0;
+  // A collection always has at least one page.
+  $('save').disabled = !n;
+  $('save').title = n ? '' : 'Add a page first: a collection needs at least one';
   pagesBody.replaceChildren(
     ...draft.pages.map((p, i) => {
       const fav = faviconImg(p.url);
@@ -220,12 +234,28 @@ $('addForm').addEventListener('submit', (e) => {
 });
 
 async function save() {
-  draft.pages = draft.pages.map((p) => ({ url: normalizeUrl(p.url), title: p.title.trim() })).filter((p) => p.url);
+  const pages = draft.pages.map((p) => ({ url: normalizeUrl(p.url), title: p.title.trim() })).filter((p) => p.url);
+  if (!pages.length) return toast('Add a page first: a collection needs at least one'), false;
+  draft.pages = pages;
   const bad = draft.pages.find((p) => !isValidUrl(p.url));
   if (bad) return toast(`Invalid URL: ${bad.url}`), false;
   draft.name = draft.name.trim() || 'Untitled collection';
+  // Not dirty before the write, so the storage change it causes reloads the page.
   setDirty(false);
-  await putCollection(draft);
+  try {
+    await putCollection(draft);
+  } catch (e) {
+    setDirty(true);
+    return toast(e.message), false;
+  }
+  if (isNew) {
+    // Stored now: from here on, this is the page of an existing collection.
+    isNew = false;
+    history.replaceState(null, '', `collection.html?id=${encodeURIComponent(id)}`);
+    await load();
+    toast('Collection created');
+    return true;
+  }
   toast('Saved');
   return true;
 }
@@ -262,7 +292,8 @@ window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault()
 api.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local') return;
   if (saved && (changes.pending || changes.sessions)) renderDrift();
-  if (!changes.collections) return;
+  // A new collection isn't stored yet: its absence from storage doesn't mean it was deleted.
+  if (!changes.collections || isNew) return;
   const fresh = changes.collections.newValue?.[id];
   if (!fresh) { if (!dirty) load(); return; }
   if (saved && JSON.stringify(fresh) === JSON.stringify(saved)) return;
@@ -270,4 +301,6 @@ api.storage.onChanged.addListener(async (changes, area) => {
   else load();
 });
 
-load();
+load().then((found) => {
+  if (found && params.get('new')) { setEditing(true); nameIn.select(); nameIn.focus(); }
+});
