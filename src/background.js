@@ -47,18 +47,15 @@ async function openCollection(id) {
     }
   }
 
-  // Undecided changes from when the window was last closed? Reopen it as it was last; the window
-  // then shows as drifted from the saved collection until the user updates or restores it.
-  const drift = Object.values(await getAll('pending', {})).find((p) => !p.live && p.collectionId === id);
-  const urls = (drift ? drift.pages : col.pages).map((p) => p.url).filter(Boolean);
+  // Always the saved pages: undecided changes from when the window was last closed weren't
+  // confirmed by anyone (a window that closed without a prompt may have held any number of
+  // unrelated tabs), so they stay listed for the user to update or restore, and never open here.
+  const urls = col.pages.map((p) => p.url).filter(Boolean);
   const win = await api.windows.create(urls.length ? { url: urls, focused: true } : { focused: true });
 
   await withSessions(async (ss) => {
+    if (await windowGone(win.id)) return; // closed before we got here: nothing to track
     const tabs = sortTabs(await api.tabs.query({ windowId: win.id }));
-    if (drift) {
-      ss[win.id] = { collectionId: id, baseline: col.pages.map((p) => p.url), initial: {}, openedAt: Date.now(), tabs: tabs.map(tabToPage) };
-      return;
-    }
     const baseline = urls.slice();
     const initial = {};
     tabs.forEach((t, i) => {
@@ -69,8 +66,37 @@ async function openCollection(id) {
     });
     ss[win.id] = { collectionId: id, baseline, initial, openedAt: Date.now(), tabs: tabs.map(tabToPage) };
   });
-  if (drift) await dropPending((p) => p.id === drift.id);
   return { opened: true, windowId: win.id };
+}
+
+async function windowGone(windowId) {
+  try { await api.windows.get(Number(windowId)); return false; } catch { return true; }
+}
+
+// Forgets the windows that closed without `windows.onRemoved` reaching us (or before it has),
+// keeping their changes undecided like a browser quit. Returns the remaining sessions.
+async function pruneSessions() {
+  const stale = await withSessions(async (ss) => {
+    const out = [];
+    for (const [w, s] of Object.entries(ss)) if (await windowGone(w)) { out.push(s); delete ss[w]; }
+    return out;
+  });
+  for (const s of stale) await reviewSession(s, { prompt: false });
+  return getAll('sessions', {});
+}
+
+// Closes a collection's windows. A window that is already gone counts as closed.
+async function closeCollection(id) {
+  const sessions = await getAll('sessions', {});
+  const windowIds = Object.entries(sessions).filter(([, s]) => s.collectionId === id).map(([w]) => Number(w));
+  await Promise.all(windowIds.map(async (w) => {
+    try {
+      await api.windows.remove(w);
+    } catch (e) {
+      if (!(await windowGone(w))) throw e;
+    }
+  }));
+  await pruneSessions();
 }
 
 // Removes the pending changes `match` selects, and closes their prompts if open.
@@ -89,6 +115,7 @@ async function dropPending(match) {
 async function adoptWindow(windowId, collectionId, baseline = null) {
   await withSessions(async (ss) => {
     for (const [w, s] of Object.entries(ss)) if (s.collectionId === collectionId) delete ss[w];
+    if (await windowGone(windowId)) return;
     const tabs = sortTabs(await api.tabs.query({ windowId }));
     ss[windowId] = {
       collectionId,
@@ -140,6 +167,13 @@ api.tabs.onReplaced?.addListener(async (addedId) => {
 // ---------- Window closed: compare and ask ----------
 
 api.windows.onRemoved.addListener(async (windowId) => {
+  // The session first, so the window stops showing as open even if what follows fails.
+  const s = await withSessions((ss) => {
+    const found = ss[windowId];
+    if (found) delete ss[windowId];
+    return found;
+  });
+
   // A prompt closed without an answer leaves the changes of a closed window undecided; those of a
   // window that is still open are worked out again from its tabs, so forget them.
   await withPending((p) => {
@@ -150,11 +184,6 @@ api.windows.onRemoved.addListener(async (windowId) => {
     }
   });
 
-  const s = await withSessions((ss) => {
-    const found = ss[windowId];
-    if (found) delete ss[windowId];
-    return found;
-  });
   if (s) await reviewSession(s, { windowId });
 });
 
@@ -167,6 +196,7 @@ async function reviewSession(s, { live = false, windowId = null, prompt = true }
   if (!col) return; // collection was deleted while open
 
   const nowPages = cleanPages(s.tabs || []);
+  if (!nowPages.length) return; // an empty window (or one closed before its tabs were read) isn't a change
   if (!hasChanged(s, col, nowPages)) return;
 
   const id = newId();
@@ -214,7 +244,7 @@ async function windowState(windowId) {
 // For the popup's list: each open collection's window, and whether its tabs have drifted.
 async function driftStatus() {
   const out = {};
-  for (const w of Object.keys(await getAll('sessions', {}))) {
+  for (const w of Object.keys(await pruneSessions())) {
     const state = await windowState(Number(w));
     if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed };
   }
@@ -257,20 +287,14 @@ api.runtime.onStartup.addListener(async () => {
 
 // After install / update / reload, drop sessions and prompts whose windows no longer exist.
 api.runtime.onInstalled.addListener(async () => {
-  const gone = async (w) => { try { await api.windows.get(Number(w)); return false; } catch { return true; } };
-  const stale = await withSessions(async (ss) => {
-    const out = [];
-    for (const [w, s] of Object.entries(ss)) if (await gone(w)) { out.push(s); delete ss[w]; }
-    return out;
-  });
+  await pruneSessions();
   await withPending(async (p) => {
     for (const [k, v] of Object.entries(p)) {
-      const promptGone = v.promptWindowId == null || await gone(v.promptWindowId);
+      const promptGone = v.promptWindowId == null || await windowGone(v.promptWindowId);
       if (v.live && promptGone) delete p[k];
       else if (promptGone) v.promptWindowId = null;
     }
   });
-  for (const s of stale) await reviewSession(s, { prompt: false });
   await api.action.setBadgeText({ text: '' }); // clear the count earlier versions showed
 });
 
@@ -280,6 +304,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case 'open': return openCollection(msg.id);
+      case 'closeCollection': return closeCollection(msg.id);
       case 'adopt': return adoptWindow(msg.windowId, msg.collectionId, msg.baseline);
       case 'saveAndAdopt': {
         await putCollection(msg.collection);

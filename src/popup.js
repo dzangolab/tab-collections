@@ -28,7 +28,7 @@ async function init() {
     send({ type: 'driftStatus' }).catch(() => ({})),
   ]);
   const list = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
-  const openIds = new Set(Object.values(sessions).map((s) => s.collectionId));
+  const openIds = new Set(Object.keys(drift)); // pruned of windows that are already gone
   const current = sessions[win.id];
 
   $('list').replaceChildren(
@@ -75,11 +75,10 @@ async function init() {
   async function toggleWindow(id, input) {
     if (input.checked) return openCollection(id);
     try {
-      const windowIds = Object.entries(sessions).filter(([, s]) => s.collectionId === id).map(([w]) => Number(w));
-      await Promise.all(windowIds.map((w) => api.windows.remove(w)));
+      await send({ type: 'closeCollection', id });
     } catch (e) {
       input.checked = true;
-      alert(e.message);
+      alert(e.message); // a window that is already gone no longer counts as an error
     }
   }
 
