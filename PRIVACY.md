@@ -2,7 +2,7 @@
 
 *Last updated: 23 November 2026*
 
-This policy covers the Tab Collections browser extension ("the extension"), published by Dzango. In short: the extension keeps your data in your browser, and only sends it to a sync server that you set up yourself. We don't collect, receive or see any of it.
+This policy covers the Tab Collections browser extension ("the extension"), published by Dzango Technologies Limited ("Dzango"). In short: the extension keeps your data in your browser, and only sends it to a sync server that you set up yourself. We don't collect, receive or see any of it.
 
 ## What the extension stores
 

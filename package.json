@@ -2,6 +2,11 @@
   "name": "tab-collections",
   "version": "1.4.2",
   "description": "Tab Collections browser extension",
+  "license": "SUL-1.0",
+  "author": {
+    "name": "Dzango Technologies Limited",
+    "url": "https://www.dzango.com"
+  },
   "scripts": {
     "build": "node build.mjs",
     "screenshots": "npm run build && playwright test --config playwright.screenshots.config.js",
