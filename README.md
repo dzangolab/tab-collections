@@ -35,6 +35,8 @@ A collection always has at least one page: you can't save one without pages.
 
 ## Contributing
 
+See [docs/testing-plan.md](docs/testing-plan.md) for what to test and how.
+
 ### Installing locally from code
 
 Build the packages, then load the one for your browser.
