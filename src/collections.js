@@ -24,14 +24,13 @@ async function render() {
     getCollections(), getAll('sessions', {}), thisWindow, closedDrift(),
     send({ type: 'driftStatus' }).catch(() => ({})),
   ]);
-  const windowsOf = (id) => Object.entries(sessions).filter(([, s]) => s.collectionId === id).map(([w]) => Number(w));
   const currentId = sessions[windowId]?.collectionId;
   const q = filter.value.trim().toLowerCase();
   const all = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
   const list = q ? all.filter((c) => (c.name + ' ' + c.description).toLowerCase().includes(q)) : all;
 
   cards.replaceChildren(...list.map((c) => {
-    const open = windowsOf(c.id).length > 0;
+    const open = c.id in live; // pruned of windows that are already gone
     const current = c.id === currentId;
     const strip = collectionDrift(c.id, closed, live, toast);
     return el('article', { class: ['card', current && 'current', strip && 'drifted'].filter(Boolean).join(' ') },
@@ -47,7 +46,7 @@ async function render() {
             role: 'switch',
             checked: open,
             'aria-label': `“${c.name}” window`,
-            onchange: (e) => toggleWindow(c.id, e.target, windowsOf(c.id)),
+            onchange: (e) => toggleWindow(c.id, e.target),
           }),
           el('span')),
       ),
@@ -72,10 +71,9 @@ async function render() {
 }
 
 // The toggle opens the collection's window, or closes it.
-async function toggleWindow(id, input, windowIds) {
+async function toggleWindow(id, input) {
   try {
-    if (input.checked) await send({ type: 'open', id });
-    else await Promise.all(windowIds.map((w) => api.windows.remove(w)));
+    await send({ type: input.checked ? 'open' : 'closeCollection', id });
   } catch (e) {
     input.checked = !input.checked;
     toast(e.message);
