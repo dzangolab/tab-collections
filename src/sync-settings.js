@@ -63,7 +63,7 @@ function connected(panel, st, notify) {
   el('option', { value: 'manual', selected: st.mode === 'manual' }, 'Manual: sync when I click Sync'));
   return el('div', { class: 'sync-connected' },
     el('p', {}, 'Syncing with ', el('strong', {}, st.label), ': ', el('code', {}, st.where),
-      st.encrypted ? el('span', { class: 'tag' }, 'Encrypted') : el('span', { class: 'tag muted' }, 'Not encrypted')),
+      st.encrypted ? el('span', { class: 'pill' }, 'Encrypted') : el('span', { class: 'pill muted' }, 'Not encrypted')),
     el('p', { class: 'muted small', id: 'syncPanelStatus' }, syncStatusText(st)),
     el('div', { class: 'row wrap' },
       mode,
