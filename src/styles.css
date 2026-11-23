@@ -200,7 +200,11 @@ main.narrow { max-width: 960px; padding: 32px 24px 60px; }
 .sync-panel .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 12px; }
 .sync-panel .field { margin-bottom: 12px; }
 .sync-panel .field input[type=text], .sync-panel .field input[type=url], .sync-panel .field input[type=password], .sync-panel .field select { display: block; width: 100%; margin-top: 5px; box-sizing: border-box; }
-.sync-panel input[type=password] { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--text); }
+.sync-panel input[type=password] { font: inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--text); }
+/* A password input with its show/hide button inside, on the right (after the rules above, which it overrides) */
+.sync-panel .secret-input { position: relative; display: block; margin-top: 5px; }
+.sync-panel .field .secret-input input { margin-top: 0; padding-right: 40px; }
+.sync-panel .secret-input .reveal { position: absolute; top: 50%; right: 2px; transform: translateY(-50%); width: 32px; height: 28px; }
 .sync-panel .field .help { margin: 4px 0 0; font-weight: normal; }
 .sync-panel label.check { display: flex; align-items: center; gap: 8px; font-weight: normal; }
 .sync-panel .row { display: flex; gap: 8px; }

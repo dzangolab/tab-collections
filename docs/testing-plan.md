@@ -350,6 +350,7 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | Y3 | Valid settings | Asks for the one server's permission, then sends `syncSetup` with defaults filled in |
 | Y4 | Bad repository, different passphrases, permission refused | A message each; no `syncSetup` |
 | Y4b | Defaults | Server, `<owner>/tab-collections`, `main` and `tab-collections.json` filled in; `<owner>` left in is refused; switching backend swaps the server unless one was typed |
+| Y4c | Show / hide | The token and both passphrase fields have an eye button (`type=button`) that switches the field to clear text and back; its label says Show or Hide and follows the field's name (access token, password, passphrase) |
 | Y5 | Set up | Sync button and "Synced 2 min ago" in the top bar; Sync sends `syncNow` |
 | Y6 | The panel | Where it syncs, Encrypted tag; the mode select sends `syncMode`; Disconnect asks, then sends `syncDisconnect` |
 | Y7 | A failed sync; changes from another device | A notice strip with Sync |
@@ -376,7 +377,7 @@ The tests reach the background worker through `context.serviceWorkers()[0].evalu
 | X9 | Open the popup (`popup.html` as a tab of the window to save) → save the window; the collection exists and is tracked |
 | X10 | Import an export file (round trip) → the same collections; a file containing an empty collection → it is skipped and counted |
 | X12 | Performance guard: open a 50-page collection; close it → one prompt, no long hang (`onRemoved` handled within 2 s) |
-| X13 | The Sync panel loads in Chromium (its modules resolve), GitHub and the defaults filled in; Connect with `<owner>` left in is refused; clicking the repository and typing replaces just `<owner>` |
+| X13 | The Sync panel loads in Chromium (its modules resolve), GitHub and the defaults filled in; Connect with `<owner>` left in is refused; clicking the repository and typing replaces just `<owner>`; the eye button shows the token, then hides it |
 
 ## 5. Manual checklist (each release)
 

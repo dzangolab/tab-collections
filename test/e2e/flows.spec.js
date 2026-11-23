@@ -158,4 +158,12 @@ test('X13 the Sync panel loads in a real browser, with GitHub and its defaults; 
   await repo.click();
   await page.keyboard.type('me');
   await expect(repo).toHaveValue('me/tab-collections');
+
+  // The eye button shows the token, and hides it again.
+  const token = panel.locator('[name=token]');
+  const eye = panel.getByRole('button', { name: 'Show the access token' });
+  await eye.click();
+  await expect(token).toHaveAttribute('type', 'text');
+  await panel.getByRole('button', { name: 'Hide the access token' }).click();
+  await expect(token).toHaveAttribute('type', 'password');
 });
