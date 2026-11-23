@@ -41,14 +41,19 @@ async function init() {
   }
   // `live`: the window is still open (the user asked from the toolbar popup).
   const theWindowHad = pending.live ? 'The open window has' : 'The window you closed had';
+  // No pages left in the window: nothing to update the collection with, nor to save as a new
+  // one, since a collection needs at least one page.
+  const noPages = !pending.pages.length;
   const col = await getCollection(pending.collectionId);
   if (!col) {
     root.replaceChildren(
       el('h2', {}, `“${pending.collectionName}” no longer exists`),
-      el('p', { class: 'muted' }, `${theWindowHad} ${plural(pending.pages.length, 'tab')}. Save them as a new collection?`),
+      el('p', { class: 'muted' }, noPages
+        ? `${theWindowHad} no pages to save.`
+        : `${theWindowHad} ${plural(pending.pages.length, 'tab')}. Save them as a new collection?`),
       el('div', { class: 'buttons' },
-        el('button', { class: 'primary', onclick: () => saveAsNew(pending.collectionName, '') }, 'Save as new collection'),
-        el('button', { onclick: discard }, 'Discard')),
+        !noPages && el('button', { class: 'primary', onclick: () => saveAsNew(pending.collectionName, '') }, 'Save as new collection'),
+        el('button', { class: noPages && 'primary', onclick: discard }, 'Discard')),
     );
     return;
   }
@@ -59,12 +64,16 @@ async function init() {
   // The setting decides which button is focused and highlighted; the other gets the plain style.
   // Restore only for a closed window: the extension never closes tabs of an open one.
   const updateByDefault = pending.live || (await getSettings()).closeDefault === 'update';
-  const updateButton = el('button', { class: updateByDefault && 'primary', onclick: () => update(col) }, 'Update');
-  const keepButton = !pending.live && el('button', { class: !updateByDefault && 'primary', onclick: discard }, 'Restore');
+  const updateButton = !noPages && el('button', { class: updateByDefault && 'primary', onclick: () => update(col) }, 'Update');
+  const keepButton = !pending.live && el('button', { class: (!updateByDefault || noPages) && 'primary', onclick: discard }, 'Restore');
+  // An open window without pages: nothing to choose; the collection stays as saved.
+  const closeButton = noPages && pending.live && el('button', { class: 'primary', onclick: closeSelf }, 'Close');
   document.title = `Update “${col.name}” collection`;
   root.replaceChildren(...[
     el('h2', {}, `Update “${col.name}” collection`),
-    el('p', {}, `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
+    el('p', {}, noPages
+      ? `${theWindowHad} no pages left. A collection needs at least one page, so “${col.name}” can’t be updated with it.`
+      : `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
     !!added.length && el('h2', {}, `${plural(added.length, 'page')} added`),
     !!added.length && el('ul', { class: 'changes' }, ...added.map((p) => pageLine(p, 'add', '+'))),
     !!removed.length && el('h2', {}, `${plural(removed.length, 'page')} removed`),
@@ -73,9 +82,9 @@ async function init() {
     el('details', {},
       el('summary', {}, `Tabs in the ${pending.live ? 'open' : 'closed'} window (${pending.pages.length})`),
       el('ul', { class: 'changes' }, ...pending.pages.map((p) => pageLine(p, '', '•')))),
-    el('div', { class: 'buttons' }, updateButton, keepButton),
-    el('h2', {}, 'Save as a new collection'),
-    el('form', {
+    el('div', { class: 'buttons' }, updateButton, keepButton, closeButton),
+    !noPages && el('h2', {}, 'Save as a new collection'),
+    !noPages && el('form', {
       class: 'row',
       onsubmit: (e) => {
         e.preventDefault();
@@ -85,7 +94,7 @@ async function init() {
     el('input', { type: 'text', name: 'name', placeholder: `${col.name} (copy)` }),
     el('button', { type: 'submit', class: 'primary' }, 'Save')),
   ].filter(Boolean));
-  (updateByDefault ? updateButton : keepButton).focus();
+  ((updateByDefault && updateButton) || keepButton || closeButton).focus();
 
   async function update(c) {
     busy = true;

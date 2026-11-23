@@ -51,7 +51,9 @@ async function openCollection(id) {
   // confirmed by anyone (a window that closed without a prompt may have held any number of
   // unrelated tabs), so they stay listed for the user to update or restore, and never open here.
   const urls = col.pages.map((p) => p.url).filter(Boolean);
-  const win = await api.windows.create(urls.length ? { url: urls, focused: true } : { focused: true });
+  // Only empty collections stored before they were forbidden: nothing to open.
+  if (!urls.length) throw new Error('This collection has no pages. Add one first.');
+  const win = await api.windows.create({ url: urls, focused: true });
 
   await withSessions(async (ss) => {
     if (await windowGone(win.id)) return; // closed before we got here: nothing to track
@@ -246,7 +248,7 @@ async function driftStatus() {
   const out = {};
   for (const w of Object.keys(await pruneSessions())) {
     const state = await windowState(Number(w));
-    if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed };
+    if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed, empty: !state.pages.length };
   }
   return out;
 }

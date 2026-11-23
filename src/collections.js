@@ -1,5 +1,5 @@
 import {
-  api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, putCollection, removeCollection, makeCollection, getAll,
+  api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, removeCollection, makeCollection, hasPages, getAll,
   buildExport, parseImport, downloadJson, el, icon, send, plural, getSettings, saveSetting,
   closedDrift, collectionDrift,
 } from './common.js';
@@ -80,9 +80,10 @@ async function toggleWindow(id, input) {
   }
 }
 
-document.getElementById('new').addEventListener('click', async () => {
-  const col = await putCollection(makeCollection({ name: 'New collection' }));
-  location.href = `collection.html?id=${encodeURIComponent(col.id)}&new=1`;
+// Nothing is stored yet: the Collection page creates the collection on its first save, once it
+// has a page, so leaving it without saving leaves no empty collection behind.
+document.getElementById('new').addEventListener('click', () => {
+  location.href = 'collection.html?new=1';
 });
 
 document.getElementById('export').addEventListener('click', async () => {
@@ -99,11 +100,17 @@ fileInput.addEventListener('change', async () => {
   fileInput.value = '';
   if (!file) return;
   try {
-    const incoming = parseImport(await file.text());
+    const { collections: incoming, skipped } = parseImport(await file.text());
+    if (!incoming.length) {
+      return alert(skipped
+        ? `Nothing to import: the ${plural(skipped, 'collection')} in “${file.name}” ${skipped === 1 ? 'has' : 'have'} no pages.`
+        : 'No collections found in this file.');
+    }
     const existing = await getCollections();
     const overwrite = incoming.filter((c) => existing[c.id]);
     const msg =
       `Import ${plural(incoming.length, 'collection')} from “${file.name}”?` +
+      (skipped ? `\n\n${plural(skipped, 'collection')} without pages will be skipped.` : '') +
       (overwrite.length
         ? `\n\n${plural(overwrite.length, 'collection')} already exist and will be replaced:\n` +
           overwrite.map((c) => `• ${existing[c.id].name}`).join('\n')
@@ -111,7 +118,7 @@ fileInput.addEventListener('change', async () => {
     if (!confirm(msg)) return;
     for (const c of incoming) existing[c.id] = c;
     await saveCollections(existing);
-    toast(`Imported ${plural(incoming.length, 'collection')}`);
+    toast(`Imported ${plural(incoming.length, 'collection')}` + (skipped ? `, skipped ${skipped} without pages` : ''));
   } catch (e) {
     alert(`Import failed: ${e.message}`);
   }
@@ -151,18 +158,25 @@ wsDialog.addEventListener('close', async () => {
   if (wsDialog.returnValue !== 'create') return;
   const chosen = wsRows.filter((r) => r.check.checked);
   if (!chosen.length) return;
-  const all = await getCollections();
   const date = new Date().toLocaleDateString();
-  for (const r of chosen) {
-    const col = makeCollection({
-      name: r.name.value,
-      description: `Created from a Vivaldi workspace on ${date}.`,
-      pages: r.ws.pages,
-    });
-    all[col.id] = col;
+  const made = chosen.map((r) => makeCollection({
+    name: r.name.value,
+    description: `Created from a Vivaldi workspace on ${date}.`,
+    pages: r.ws.pages,
+  }));
+  // A workspace whose tabs have no usable URL would make an empty collection: skip it.
+  const kept = made.filter(hasPages);
+  const skipped = made.length - kept.length;
+  const skippedMsg = skipped ? `skipped ${skipped} without pages` : '';
+  if (!kept.length) return toast(`Nothing created: ${skippedMsg}`);
+  const all = await getCollections();
+  for (const col of kept) all[col.id] = col;
+  try {
+    await saveCollections(all);
+  } catch (e) {
+    return toast(e.message);
   }
-  await saveCollections(all);
-  toast(`Created ${plural(chosen.length, 'collection')}`);
+  toast(`Created ${plural(kept.length, 'collection')}` + (skipped ? `, ${skippedMsg}` : ''));
 });
 
 // ---------- Settings ----------

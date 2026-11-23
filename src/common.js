@@ -24,13 +24,29 @@ export async function getAll(key, fallback) {
 // ---------- Collections ----------
 
 export const getCollections = () => getAll('collections', {});
-export const saveCollections = (collections) => STORE.set({ collections });
+
+// A collection always has at least one page.
+export const hasPages = (col) => Array.isArray(col?.pages) && col.pages.some((p) => p?.url);
+
+// Every write of the collections goes through here, so no caller can store an empty one. Empty
+// ones stored before this rule stay as they are (unchanged), so saving the others, or deleting
+// one, still works.
+export async function saveCollections(collections) {
+  const stored = await getCollections();
+  for (const col of Object.values(collections)) {
+    if (hasPages(col)) continue;
+    if (stored[col.id] && JSON.stringify(stored[col.id]) === JSON.stringify(col)) continue;
+    throw new Error(`Can’t save “${col.name}”: a collection needs at least one page`);
+  }
+  await STORE.set({ collections });
+}
 
 export async function getCollection(id) {
   return (await getCollections())[id] || null;
 }
 
 export async function putCollection(col) {
+  if (!hasPages(col)) throw new Error(`Can’t save “${col.name}”: a collection needs at least one page`);
   const all = await getCollections();
   col.updatedAt = Date.now();
   all[col.id] = col;
@@ -230,7 +246,7 @@ export function parseImport(text) {
         ? [data]
         : null;
   if (!list) throw new Error('No collections found in this file.');
-  return list.map((c) => {
+  const collections = list.map((c) => {
     if (!c || typeof c.name !== 'string' || !Array.isArray(c.pages)) {
       throw new Error('The file contains an invalid collection entry.');
     }
@@ -242,6 +258,9 @@ export function parseImport(text) {
       createdAt: typeof c.createdAt === 'number' ? c.createdAt : undefined,
     });
   });
+  // Collections without a valid page can't be stored: skip them, and say how many.
+  const kept = collections.filter(hasPages);
+  return { collections: kept, skipped: collections.length - kept.length };
 }
 
 export function downloadJson(filename, data) {
@@ -312,7 +331,8 @@ export function icon(name, size = 16) {
 }
 
 // The strip shown under a collection whose window's tabs have changed. `onRestore` only for a
-// closed window: the extension never closes tabs of an open one.
+// closed window: the extension never closes tabs of an open one. No `onUpdate` when the window has
+// no pages left.
 export function driftStrip({ onDetails, onUpdate, onRestore }) {
   const ns = 'http://www.w3.org/2000/svg';
   const warn = document.createElementNS(ns, 'svg');
@@ -335,7 +355,7 @@ export function driftStrip({ onDetails, onUpdate, onRestore }) {
       ? 'The tabs in this collection’s window changed before it was closed'
       : 'The tabs in this collection’s window have changed'),
     el('button', { onclick: onDetails }, 'Details'),
-    el('button', { class: 'primary', onclick: onUpdate }, 'Update'),
+    onUpdate && el('button', { class: 'primary', onclick: onUpdate }, 'Update'),
     onRestore && el('button', { onclick: onRestore }, 'Restore'));
 }
 
@@ -348,7 +368,10 @@ export function collectionDrift(id, closed, live, notify) {
   if (pending) {
     return driftStrip({
       onDetails: () => openReview(pending.id).catch(failed),
-      onUpdate: () => updateFromPending(pending).then(() => notify('Collection updated'), failed),
+      // No Update when the window had no pages left: a collection needs at least one.
+      onUpdate: pending.pages.length
+        ? () => updateFromPending(pending).then(() => notify('Collection updated'), failed)
+        : null,
       onRestore: () => resolvePending(pending.id).then(() => notify('Collection restored'), failed),
     });
   }
@@ -356,7 +379,9 @@ export function collectionDrift(id, closed, live, notify) {
   if (!w?.changed) return null;
   return driftStrip({
     onDetails: () => send({ type: 'reviewWindow', windowId: w.windowId }).catch(failed),
-    onUpdate: () => send({ type: 'updateFromWindow', windowId: w.windowId }).then(() => notify('Collection updated'), failed),
+    onUpdate: w.empty
+      ? null
+      : () => send({ type: 'updateFromWindow', windowId: w.windowId }).then(() => notify('Collection updated'), failed),
   });
 }
 
