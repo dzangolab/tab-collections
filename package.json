@@ -1,6 +1,6 @@
 {
   "name": "tab-collections",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Tab Collections browser extension",
   "scripts": {
     "build": "node build.mjs",
