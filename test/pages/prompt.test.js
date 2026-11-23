@@ -185,4 +185,43 @@ describe('prompt', () => {
       assert.equal(page.closed, 1);
     });
   });
+
+  describe('R10 suspicious growth (tabs from hidden Vivaldi workspaces)', () => {
+    const many = Array.from({ length: 20 }, (_, i) => page4(`https://many.example/${i}`));
+    test('warns, and Restore stays the default even when the setting says Update', async () => {
+      seedPending({ pages: many });
+      fake.store.settings = { closeDefault: 'update' };
+      const page = await openPrompt();
+      assert.match(text(page.doc.querySelector('.warning')), /This window has 20 tabs, but the collection has 3 pages/);
+      assert.equal(text(page.doc.activeElement), 'Restore');
+      assert.notEqual(button(page, 'Update').className, 'primary');
+    });
+    test('an open window: Update is offered but not focused', async () => {
+      seedPending({ pages: many, live: true });
+      const page = await openPrompt();
+      assert.ok(page.doc.querySelector('.warning'));
+      assert.deepEqual(buttons(page).map(text), ['Update']);
+      assert.notEqual(text(page.doc.activeElement), 'Update');
+    });
+    test('no warning for ordinary changes', async () => {
+      seedPending();
+      const page = await openPrompt();
+      assert.equal(page.doc.querySelector('.warning'), null);
+    });
+  });
+
+  describe('R11 the Vivaldi note', () => {
+    test('shown when tabs carry vivExtData', async () => {
+      const w = fake.openWindow([A]);
+      fake.addTab(w, { url: B, vivExtData: '{}' });
+      seedPending();
+      const page = await openPrompt();
+      assert.match(text(page.doc.querySelector('.note')), /In Vivaldi, a window includes the tabs of all its workspaces/);
+    });
+    test('not shown in other browsers', async () => {
+      seedPending();
+      const page = await openPrompt();
+      assert.equal(page.doc.querySelector('.note'), null);
+    });
+  });
 });

@@ -250,7 +250,9 @@ async function driftStatus() {
   const out = {};
   for (const w of Object.keys(await pruneSessions())) {
     const state = await windowState(Number(w));
-    if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed, empty: !state.pages.length };
+    if (state) {
+      out[state.col.id] = { windowId: Number(w), changed: state.changed, count: state.pages.length, empty: !state.pages.length };
+    }
   }
   return out;
 }

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   buildExport, cleanPages, diffPages, getCollections, groupByWorkspace, hasPages, isIgnorableUrl, makeCollection,
   normalizeUrl, parseImport, plural, putCollection, removeCollection, sameUrlList, saveCollections, slug, suggestName,
-  vivaldiData, workspaceCreated, workspaceKey,
+  suspiciousGrowth, vivaldiData, workspaceCreated, workspaceKey,
 } from '../../src/common.js';
 
 const p = (url, title = '') => ({ url, title });
@@ -258,5 +258,18 @@ describe('U15 export round trip', () => {
     const c = makeCollection({ name: 'A', description: 'd', pages: [p('https://a.com', 'A')], createdAt: 3 });
     const [back] = parseImport(JSON.stringify(buildExport([c]))).collections;
     for (const k of ['id', 'name', 'description', 'pages', 'createdAt']) assert.deepEqual(back[k], c[k], k);
+  });
+});
+
+describe('U16 suspiciousGrowth', () => {
+  test('a jump of more than 10 tabs to more than double', () => {
+    assert.equal(suspiciousGrowth(4, 86), true);
+    assert.equal(suspiciousGrowth(0, 11), true);
+  });
+  test('small or proportionate growth is not suspicious', () => {
+    assert.equal(suspiciousGrowth(4, 14), false, 'only 10 more');
+    assert.equal(suspiciousGrowth(20, 40), false, 'exactly double');
+    assert.equal(suspiciousGrowth(30, 50), false, 'less than double');
+    assert.equal(suspiciousGrowth(10, 3), false, 'shrinking');
   });
 });

@@ -108,6 +108,7 @@ There's no need to export internals. Assertions go through storage (`collections
 | U13 | `suggestName` | 0 hosts → `Workspace`; strips `www.`; dedupes hosts; `a, b +3` |
 | U14 | `vivaldiData`, `workspaceKey`, `workspaceCreated` | Parses `vivExtData` given as an object or as a JSON string; bad JSON → `null`; float workspace ids are rounded; missing, empty or NaN id → `none`; only 13-digit timestamps give a date |
 | U15 | `buildExport` → `parseImport` | A round trip keeps `id`, `name`, `description`, `pages` and `createdAt` |
+| U16 | `suspiciousGrowth` | True for more than 10 added tabs and more than double the pages; false for smaller, proportionate or shrinking changes |
 
 ## 2. Background integration tests
 
@@ -168,7 +169,7 @@ Every test starts from a known storage state, then fires events. "Prompt opens" 
 
 | ID | Scenario | Expected |
 |---|---|---|
-| B30 | `driftStatus` with one live window, and one changed window that closed without `onRemoved` reaching the worker | Only the live one is listed: `{ windowId, changed, empty }`; the closed one is handled as `onRemoved` would: a closed drift and a prompt |
+| B30 | `driftStatus` with one live window, and one changed window that closed without `onRemoved` reaching the worker | Only the live one is listed: `{ windowId, changed, count, empty }`; the closed one is handled as `onRemoved` would: a closed drift and a prompt |
 | B31 | `windowStatus` for a collection window | `{ changed, name }`; `null` for any other window |
 | B32 | `reviewWindow` on a changed open window | A `live: true` pending entry is stored; the prompt opens |
 | B33 | `reviewWindow` on a window that isn't a collection | Error "This window is not a collection" |
@@ -218,6 +219,7 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | C8 | Vivaldi | The button shows only with workspace data; the dialog lists the workspaces, with `none` unticked; Create stores the ticked ones and skips the empty ones |
 | C9 | Settings | `closeDefault` loads, saves and shows a toast |
 | C10 | Drift strip | For a closed drift: Details, Update (not when the drift has 0 pages) and Restore. For a live drift: Details and Update, no Restore |
+| C10b | Drift strip, suspicious growth | Update on a closed or live drift that grows suspiciously opens the review (prompt or `reviewWindow`) instead of saving, with a "Check the tabs" toast |
 | C11 | A storage change in another tab | The page renders again |
 
 ### Collection page (`collection.js`)
@@ -252,6 +254,8 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | R7 | The collection was deleted | "no longer exists"; Save as new and Discard (Discard only with 0 pages) |
 | R8 | Unknown pending id | "Nothing to review" |
 | R9 | Auto-close | Closes on blur after having focus, and after 5 minutes; not while busy; closes when its pending entry is removed elsewhere |
+| R10 | Suspicious growth | Warns; Restore stays the default even with `closeDefault: update`; an open window's Update isn't focused; no warning for ordinary changes |
+| R11 | Vivaldi note | Shown when tabs carry `vivExtData`; not otherwise |
 
 ## 4. End-to-end tests (Playwright, Chromium)
 

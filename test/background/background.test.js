@@ -392,7 +392,7 @@ describe('2.5 state for the pages', () => {
     await addTab(w2, A);
     fake.vanishWindow(w2);
     const status = await send({ type: 'driftStatus' });
-    assert.deepEqual(status, { [col.id]: { windowId: w1, changed: false, empty: false } });
+    assert.deepEqual(status, { [col.id]: { windowId: w1, changed: false, count: 3, empty: false } });
     await fake.flush();
     assert.equal(closedDrifts().length, 1);
     assert.equal(closedDrifts()[0].collectionId, other.id);
