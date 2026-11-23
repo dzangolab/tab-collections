@@ -7,6 +7,9 @@
 //                changes the user hasn't decided on: a closed window's (live: false) until it is
 //                updated or restored; an open window's (live: true) only while its prompt is open
 //   settings:    { closeDefault: 'keep' | 'update' }
+//   tombstones:  { [id]: deletedAt } collections deleted on this device, so sync doesn't bring them back
+//   syncConfig:  this device's sync settings and credentials (never synced), see src/sync/engine.js
+//   syncState:   the last synced version (the merge base), status and conflicts, see src/sync/engine.js
 
 // Cross-browser API handle: Firefox and Safari expose `browser`, Chromium exposes `chrome`.
 // All of them return promises in Manifest V3.
@@ -38,7 +41,13 @@ export async function saveCollections(collections) {
     if (stored[col.id] && JSON.stringify(stored[col.id]) === JSON.stringify(col)) continue;
     throw new Error(`Can’t save “${col.name}”: a collection needs at least one page`);
   }
-  await STORE.set({ collections });
+  // A collection that disappears leaves a tombstone, so sync deletes it elsewhere too instead of
+  // bringing it back; one that comes back (an import) loses its tombstone.
+  const tombstones = await getAll('tombstones', {});
+  const now = Date.now();
+  for (const id of Object.keys(stored)) if (!collections[id]) tombstones[id] = now;
+  for (const id of Object.keys(collections)) delete tombstones[id];
+  await STORE.set({ collections, tombstones });
 }
 
 export async function getCollection(id) {
