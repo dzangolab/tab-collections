@@ -1,6 +1,14 @@
 # Store assets
 
-Images for the extension's store listings (Chrome Web Store first).
+The extension's store listing and its images (Chrome Web Store first).
+
+## Listing
+
+`listing.json` holds everything to enter in the Chrome Web Store Developer Dashboard: name, summary, description, category, the images, the privacy answers (single purpose, permission justifications, data usage, certifications) and distribution. `null` marks what's still to decide: the privacy policy, homepage and support URLs. The summary must match `description` in the manifest (`build.mjs`).
+
+## Icon
+
+`icon-128.png` is the store icon, following Google's guidelines: 128×128, the artwork 96×96 in the middle with 16 px of transparent space around it. The extension itself keeps the full-size `src/icons/icon128.png`.
 
 ## Screenshots
 

@@ -204,4 +204,12 @@ test('store screenshots', async ({ context, ext, worker }) => {
       box-shadow:0 30px 70px rgba(0,0,0,.35)">
     <img src="${img(popupPng)}" alt="" style="position:absolute;left:640px;top:150px;width:300px;border-radius:12px;background:#fff;
       box-shadow:0 30px 70px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.2)">`);
+
+  // The store icon, as Google's guidelines want it: 128×128, the artwork 96×96 in the middle, with
+  // 16 px of transparent space around it. The toolbar keeps the full-size src/icons/icon128.png.
+  const storeIcon = await context.newPage();
+  await storeIcon.setViewportSize({ width: 128, height: 128 });
+  await storeIcon.setContent(`<!doctype html><html><body style="margin:0;background:transparent">
+    <img src="${img(icon)}" width="96" height="96" alt="" style="display:block;margin:16px"></body></html>`);
+  await storeIcon.screenshot({ path: path.resolve(OUT, '../icon-128.png'), omitBackground: true });
 });
