@@ -4,6 +4,7 @@
   "description": "Tab Collections browser extension",
   "scripts": {
     "build": "node build.mjs",
+    "screenshots": "npm run build && playwright test --config playwright.screenshots.config.js",
     "test": "node --test 'test/unit/*.test.js' 'test/background/*.test.js' 'test/pages/*.test.js'",
     "test:e2e": "npm run build && playwright test"
   },
