@@ -1,4 +1,4 @@
-// The Collection page (E1–E13 in docs/testing-plan.md).
+// The Collection page (E1–E14 in docs/testing-plan.md).
 import { fake } from '../fake-browser.js';
 import { beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,6 +38,7 @@ describe('Collection page', () => {
     assert.equal(text(page.$('status')), 'Not saved yet');
     assert.equal(page.$('save').disabled, true);
     assert.equal(page.$('revert').hidden, true);
+    assert.equal(page.$('cancel').hidden, false);
     for (const id of ['open', 'exportOne', 'delete']) assert.equal(page.$(id).hidden, true, id);
     assert.equal(page.$('details').hidden, false, 'name and description are being edited');
     assert.deepEqual(fake.store.collections, {});
@@ -58,6 +59,36 @@ describe('Collection page', () => {
     assert.equal(toast(page), 'Collection created');
     assert.equal(page.$('open').hidden, false);
     assert.equal(page.$('savebar').hidden, true);
+    assert.equal(page.$('cancel').hidden, true);
+  });
+
+  test('E14 Cancel leaves a new collection without storing it, asking only when something was entered', async () => {
+    fake.store.collections = {};
+    const blank = await openPage('?new=1');
+    fire(blank.$('cancel'), 'click');
+    assert.deepEqual(blank.confirms, []);
+    assert.deepEqual(blank.navigations, ['collections.html']);
+
+    const kept = await openPage('?new=1', { confirm: [false] });
+    await addPage(kept, 'a.example');
+    fire(kept.$('cancel'), 'click');
+    assert.deepEqual(kept.confirms, ['Discard this new collection?']);
+    assert.deepEqual(kept.navigations, [], 'answering no stays on the page');
+    assert.equal(cards(kept).length, 1);
+
+    const left = await openPage('?new=1', { confirm: [true] });
+    await addPage(left, 'a.example');
+    fire(left.$('cancel'), 'click');
+    assert.deepEqual(left.navigations, ['collections.html']);
+    assert.equal(left.doc.body.classList.contains('dirty'), false, 'no leave-page warning after it');
+    assert.deepEqual(fake.store.collections, {});
+  });
+
+  test('E14 an existing collection has no Cancel, only Revert', async () => {
+    const page = await openPage();
+    setValue(cards(page)[0].querySelector('.title-in'), 'Renamed');
+    assert.equal(page.$('cancel').hidden, true);
+    assert.equal(page.$('revert').hidden, false);
   });
 
   test('E3 adding a page normalizes its URL, and refuses an invalid one', async () => {

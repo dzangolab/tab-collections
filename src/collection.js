@@ -43,6 +43,7 @@ function setDirty(v) {
   $('savebar').hidden = !v && !isNew;
   $('status').textContent = isNew ? 'Not saved yet' : 'Unsaved changes';
   $('revert').hidden = isNew;
+  $('cancel').hidden = !isNew;
   if (!v) $('external').hidden = true;
 }
 
@@ -262,6 +263,12 @@ async function save() {
 
 $('save').addEventListener('click', save);
 $('revert').addEventListener('click', load);
+// Leaves a new collection without creating it, asking first when something was entered.
+$('cancel').addEventListener('click', () => {
+  if (dirty && !confirm('Discard this new collection?')) return;
+  setDirty(false);
+  location.href = 'collections.html';
+});
 $('reload').addEventListener('click', (e) => { e.preventDefault(); load(); });
 
 $('open').addEventListener('click', async () => {

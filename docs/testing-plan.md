@@ -237,6 +237,7 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | E11 | Open while dirty | Asks to save first; cancel → nothing opens |
 | E12 | Export while dirty | Exports the saved version, with a toast |
 | E13 | A stored empty collection (from before empty ones were refused) | It shows; pages can be added, or it can be deleted |
+| E14 | Cancel on a new collection | Shown only while new; nothing entered → back to the Collections page; something entered → asks first; nothing stored |
 
 ### Prompt (`prompt.js`)
 
