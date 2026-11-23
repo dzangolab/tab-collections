@@ -113,3 +113,7 @@ The build writes one package per browser into `dist/`:
 - Site icons come from each site's `/favicon.ico` (with a globe fallback) instead of Chrome's icon cache.
 - If Safari won't open a popup-style window, the "Update collection?" prompt opens as a normal window.
 - Things to check: closing a collection window brings up the prompt; **Export** downloads a file (Safari may show it in the Downloads list rather than saving it straight away).
+
+## License
+
+[Sustainable Use License 1.0](LICENSE): free to use, copy and modify for personal, non-commercial or internal business use; redistribution only free of charge and for non-commercial purposes.
