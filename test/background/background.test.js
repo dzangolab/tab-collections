@@ -318,13 +318,27 @@ describe('2.3 closing a window', () => {
   test('B26 a slow windows.onRemoved: the window stops counting as open at once', async () => {
     const w = await open();
     for (let i = 0; i < 90; i++) fake.addTab(w, { url: `https://many.example/${i}` });
+    await fake.flush();
     fake.options.onRemovedDelay = 50;
-    fake.closeWindowNow(w); // tab events are still queued; onRemoved comes later
+    fake.closeWindowNow(w); // onRemoved comes later
     const status = await send({ type: 'driftStatus' });
     assert.equal(col.id in status, false);
     assert.deepEqual(sessions(), {});
     await fake.flush();
-    assert.ok(closedDrifts().length <= 1);
+    assert.equal(closedDrifts().length, 1);
+    assert.equal(fake.promptWindows().length, 1, 'the prompt still opens, once');
+  });
+
+  test('B26b regression: driftStatus running as a changed window closes still prompts, once', async () => {
+    const w = await open();
+    await addTab(w, D);
+    const status = send({ type: 'driftStatus' }); // a page rendering while the window closes
+    fake.closeWindowNow(w);
+    await status;
+    await fake.flush();
+    assert.equal(closedDrifts().length, 1);
+    assert.equal(fake.promptWindows().length, 1);
+    assert.equal(closedDrifts()[0].promptWindowId, fake.promptWindows()[0].id);
   });
 });
 
@@ -337,6 +351,16 @@ describe('2.4 closeCollection', () => {
     await fake.flush();
     assert.equal(fake.windows.has(w), false);
     assert.deepEqual(sessions(), {});
+  });
+
+  test('B27b closing a changed window from the toggle prompts', async () => {
+    const w = await open();
+    await addTab(w, D);
+    await send({ type: 'closeCollection', id: col.id });
+    await fake.flush();
+    assert.equal(fake.windows.has(w), false);
+    assert.equal(closedDrifts().length, 1);
+    assert.equal(fake.promptWindows().length, 1);
   });
 
   test('B28 regression: an already closed window is not an error', async () => {
@@ -361,7 +385,7 @@ describe('2.4 closeCollection', () => {
 // ---------- 2.5 State for the pages ----------
 
 describe('2.5 state for the pages', () => {
-  test('B30 driftStatus lists live windows only; a stale changed one becomes a drift without a prompt', async () => {
+  test('B30 driftStatus lists live windows only; a changed one that closed unseen is handled as closed', async () => {
     const other = seedCollection('Other', [D]);
     const w1 = await open();
     const w2 = await open(other);
@@ -372,7 +396,7 @@ describe('2.5 state for the pages', () => {
     await fake.flush();
     assert.equal(closedDrifts().length, 1);
     assert.equal(closedDrifts()[0].collectionId, other.id);
-    assert.equal(fake.promptWindows().length, 0);
+    assert.equal(fake.promptWindows().length, 1);
   });
 
   test('B31 windowStatus', async () => {

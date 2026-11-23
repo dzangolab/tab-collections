@@ -75,15 +75,17 @@ async function windowGone(windowId) {
   try { await api.windows.get(Number(windowId)); return false; } catch { return true; }
 }
 
-// Forgets the windows that closed without `windows.onRemoved` reaching us (or before it has),
-// keeping their changes undecided like a browser quit. Returns the remaining sessions.
-async function pruneSessions() {
+// Forgets the windows that have closed, and returns the remaining sessions. Usually
+// `windows.onRemoved` just hasn't run yet; it will then find no session, so this handles the
+// window as it would, prompt included. `prompt: false` for windows that closed while the
+// extension wasn't running (reloaded): their changes stay undecided, like a browser quit.
+async function pruneSessions({ prompt = true } = {}) {
   const stale = await withSessions(async (ss) => {
     const out = [];
-    for (const [w, s] of Object.entries(ss)) if (await windowGone(w)) { out.push(s); delete ss[w]; }
+    for (const [w, s] of Object.entries(ss)) if (await windowGone(w)) { out.push([Number(w), s]); delete ss[w]; }
     return out;
   });
-  for (const s of stale) await reviewSession(s, { prompt: false });
+  for (const [windowId, s] of stale) await reviewSession(s, prompt ? { windowId } : { prompt: false });
   return getAll('sessions', {});
 }
 
@@ -289,7 +291,7 @@ api.runtime.onStartup.addListener(async () => {
 
 // After install / update / reload, drop sessions and prompts whose windows no longer exist.
 api.runtime.onInstalled.addListener(async () => {
-  await pruneSessions();
+  await pruneSessions({ prompt: false });
   await withPending(async (p) => {
     for (const [k, v] of Object.entries(p)) {
       const promptGone = v.promptWindowId == null || await windowGone(v.promptWindowId);
