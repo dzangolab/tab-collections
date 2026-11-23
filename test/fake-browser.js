@@ -34,7 +34,10 @@ export function createFakeBrowser() {
       popupWindows: true, // false: windows.create({ type: 'popup' }) throws (Safari)
       failWindowCreate: false, // true: every windows.create throws
       loadTabs: false, // true: new tabs start loading (status 'loading', pendingUrl), see completeTab
+      grantPermissions: true, // permissions.request's answer
     },
+    alarms: new Map(), // name → alarm
+    permissionRequests: [], // origins asked for, per permissions.request call
     store: {},
     windows: new Map(), // id → { id, type, focused, tabIds: [] }
     tabs: new Map(), // id → tab
@@ -186,6 +189,18 @@ export function createFakeBrowser() {
       onInstalled: ev(),
     },
 
+    alarms: {
+      async create(name, info) { fake.alarms.set(name, { name, ...info }); },
+      async get(name) { return fake.alarms.get(name); },
+      async clear(name) { return fake.alarms.delete(name); },
+      onAlarm: ev(),
+    },
+
+    permissions: {
+      async request({ origins = [] } = {}) { fake.permissionRequests.push(origins); return fake.options.grantPermissions; },
+      async contains() { return fake.options.grantPermissions; },
+    },
+
     action: {
       async setBadgeText({ text }) { fake.badge = text; },
     },
@@ -297,6 +312,7 @@ export function createFakeBrowser() {
   };
 
   fake.windowUrls = (windowId) => fake.windows.get(windowId)?.tabIds.map((t) => fake.tabs.get(t).url || fake.tabs.get(t).pendingUrl);
+  fake.fireAlarm = (name) => api.alarms.onAlarm._emit({ name });
   fake.windowIds = () => [...fake.windows.keys()];
   fake.findWindow = (pred) => [...fake.windows.values()].find((w) => pred(fake.windowUrls(w.id), w));
   fake.promptWindows = () => [...fake.windows.values()].filter((w) => fake.windowUrls(w.id).some((u) => u.startsWith(`${ORIGIN}prompt.html`)));
@@ -317,7 +333,9 @@ export function createFakeBrowser() {
   // Empties storage, windows and tabs. Listeners stay unless `listeners: true` (the background
   // registers its listeners once, when imported).
   fake.reset = ({ listeners = false } = {}) => {
-    Object.assign(fake.options, { onRemovedDelay: 0, popupWindows: true, failWindowCreate: false, loadTabs: false });
+    Object.assign(fake.options, { onRemovedDelay: 0, popupWindows: true, failWindowCreate: false, loadTabs: false, grantPermissions: true });
+    fake.alarms.clear();
+    fake.permissionRequests = [];
     fake.store = {};
     fake.windows.clear();
     fake.tabs.clear();

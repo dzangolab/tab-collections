@@ -4,6 +4,10 @@
 import {
   api, getAll, getCollection, putCollection, newId, cleanPages, sameUrlList, isIgnorableUrl, openReview,
 } from './common.js';
+import {
+  CHECK_ALARM, disconnectSync, ensureAlarm, onLocalChange, refreshBadge, resolveConflict, scheduledCheck, setSyncMode,
+  setupSync, syncNow, syncStatus,
+} from './sync/engine.js';
 
 const SETTLE_WINDOW_MS = 60_000; // redirects within this time after opening are not "changes"
 
@@ -302,6 +306,19 @@ api.runtime.onInstalled.addListener(async () => {
     }
   });
   await api.action.setBadgeText({ text: '' }); // clear the count earlier versions showed
+  await refreshBadge();
+  await ensureAlarm();
+});
+
+// ---------- Sync ----------
+
+api.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && (changes.collections || changes.tombstones)) onLocalChange().catch((e) => console.warn('[sync]', e));
+});
+api.alarms?.onAlarm.addListener((alarm) => { if (alarm.name === CHECK_ALARM) return scheduledCheck(); });
+api.runtime.onStartup.addListener(async () => {
+  await ensureAlarm();
+  await scheduledCheck();
 });
 
 // ---------- Messages from pages ----------
@@ -324,6 +341,12 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const state = await windowState(msg.windowId);
         return state && { changed: state.changed, name: state.col.name };
       }
+      case 'syncDisconnect': return disconnectSync();
+      case 'syncMode': return setSyncMode(msg.mode);
+      case 'syncNow': return syncNow();
+      case 'syncResolve': return resolveConflict(msg.id, msg.choice);
+      case 'syncSetup': return setupSync(msg.config);
+      case 'syncStatus': return syncStatus();
       default: throw new Error(`Unknown message: ${msg?.type}`);
     }
   })().then(
