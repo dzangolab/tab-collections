@@ -1,5 +1,5 @@
 {
-  "$comment": "Chrome Web Store listing for Tab Collections: what to enter in the Developer Dashboard (https://chrome.google.com/webstore/devconsole). File paths are relative to this folder. null: still to decide.",
+  "$comment": "Chrome Web Store listing for Tab Collections: what to enter in the Developer Dashboard (https://chrome.google.com/webstore/devconsole). File paths are relative to this folder.",
   "distribution": {
     "pricing": "Free",
     "regions": "All regions",
@@ -27,7 +27,7 @@
       "tabs": "Reads the addresses and titles of a collection window's tabs, to save them and to notice when they change.",
       "unlimitedStorage": "Large numbers of collections can exceed the default local storage quota."
     },
-    "privacyPolicyUrl": null,
+    "privacyPolicyUrl": "https://github.com/dzangolab/tab-collections/blob/main/PRIVACY.md",
     "remoteCode": "No, I am not using remote code",
     "singlePurpose": "Save groups of tabs as named collections and open each collection as its own window."
   },
