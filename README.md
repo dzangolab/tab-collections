@@ -25,7 +25,24 @@ A collection always has at least one page: you can't save one without pages.
 - **Close the window:** if the tabs changed, the prompt asks you to **Update** the collection, **Restore** it (keep it as saved), or save the tabs as a new collection. If the window had no pages left, there's nothing to update or save, so only **Restore** remains. Redirects during the first page load and empty new-tab pages don't count as changes. The prompt closes itself when you switch to another window, or after 5 minutes; the changes then stay undecided, shown on the Collections and Collection pages with **Details** (the prompt again), **Update** and **Restore**. A window that closes without a prompt, such as when the browser quits, also keeps its changes undecided. Reopening a collection always opens its saved pages; its undecided changes stay listed until you update or restore it.
 - **Changed open window:** the Collections and Collection pages show **Details** and **Update** while the window is open. There's no Restore then: the extension never closes your tabs.
 - **Settings** (on the Collections page, also the extension's Options page): *Default behaviour when closing a window which has drifted from its collection* picks which prompt button is focused and highlighted: **Update**, or **Restore** for *Keep collection unchanged* (the default).
-- **Storage:** everything is kept locally in the browser (`storage.local`). Export/Import JSON files to back up or share. Collections are not synced between browsers, but an export from one browser imports into any other.
+- **Storage:** everything is kept locally in the browser (`storage.local`), unless you set up sync (below). Export/Import JSON files to back up or share; an export from one browser imports into any other.
+
+## Sync
+Sync shares your collections between browsers and devices through storage you own: a private repository on GitHub (or GitHub Enterprise), GitLab, Gitea, Forgejo or Codeberg, or a file on a WebDAV server such as Nextcloud, ownCloud, Synology or Fastmail. No data reaches us or your browser vendor. The design is in [ADR 0001](docs/adr/0001-sync-through-user-owned-storage.md).
+
+- **Set up** each device once, in the **Sync** panel of the Collections page:
+  - **Git hosts:** create a private repository first (it can be empty), then enter the server, `owner/name`, the branch and the file name (default `tab-collections.json`), and an access token limited to that repository: on GitHub, a fine-grained token with *Contents: read and write*; on GitLab, a project access token with the `api` scope; on Gitea and Forgejo, a token with *repository: read and write*.
+  - **WebDAV:** enter the sync file's full address (its folder must exist), your username and an app password.
+  - The browser asks for access to that one server. The extension never asks for access to all sites.
+  - Credentials stay on the device and are never synced.
+- **Encryption** (optional): the file is encrypted on the device with a passphrase (PBKDF2, then AES-GCM), so the server only holds ciphertext. Every device needs the same passphrase; if you lose it, the synced copy can't be read, though each device keeps its own collections.
+- **Modes**, per device: **Automatic** (the default) syncs each change a few seconds after you make it. **Manual** keeps changes on the device until you click **Sync**, and only announces changes from other devices. Both check for changes at browser start and every 5 minutes.
+- **Sync button and status:** in the Collections page's top bar and in the toolbar popup. A notice on the Collections page and a dot on the toolbar icon say when another device changed collections (Manual mode), and a notice when a sync failed. A failed sync keeps your changes on the device and retries at the next check.
+- **Merging:** each collection merges with what changed on other devices since the last sync. Changes to different parts of a collection are combined; pages added or removed on either device are added or removed. Deleting a collection deletes it on other devices too, unless it was edited there since, in which case the edit wins.
+- **Conflicts:** when two devices change the same thing (both rename a collection, or edit the same page's title), each keeps its own version, and the collection shows a strip: **Keep mine**, **Keep theirs**, or **Keep both** (yours becomes a copy).
+- **What syncs:** collections only. Open windows, undecided window changes and settings stay on each device.
+- **History:** on a git host, every sync is a commit, so old versions can be restored from the repository. On WebDAV, only if the server keeps file versions (Nextcloud does).
+- **Disconnect** stops syncing on that device; its collections stay, and the sync file stays on the server.
 
 ## Vivaldi workspaces
 - **Collections page → From Vivaldi workspaces…** lists the workspaces that have open tabs. Tick the ones you want, name each one, then click **Create collections**.

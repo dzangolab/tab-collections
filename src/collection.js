@@ -1,6 +1,6 @@
 import {
   api, getCollection, putCollection, removeCollection, makeCollection, normalizeUrl, faviconUrl, faviconImg, buildExport, downloadJson,
-  slug, el, icon, send, plural, closedDrift, collectionDrift,
+  slug, el, icon, send, plural, closedDrift, collectionDrift, conflictStrip,
 } from './common.js';
 
 const params = new URLSearchParams(location.search);
@@ -70,9 +70,11 @@ function formatDate(ms) {
 
 // The drift strip, when this collection's window has changed.
 async function renderDrift() {
-  const [closed, live] = await Promise.all([closedDrift(), send({ type: 'driftStatus' }).catch(() => ({}))]);
-  const strip = collectionDrift(id, closed, live, toast);
-  $('drift').replaceChildren(...(strip ? [strip] : []));
+  const [closed, live, sync] = await Promise.all([
+    closedDrift(), send({ type: 'driftStatus' }).catch(() => ({})), send({ type: 'syncStatus' }).catch(() => null),
+  ]);
+  const strips = [conflictStrip(id, sync, toast), collectionDrift(id, closed, live, toast)].filter(Boolean);
+  $('drift').replaceChildren(...strips);
 }
 
 function renderDates() {
@@ -300,7 +302,7 @@ window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault()
 
 api.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local') return;
-  if (saved && (changes.pending || changes.sessions)) renderDrift();
+  if (saved && (changes.pending || changes.sessions || changes.syncState)) renderDrift();
   // A new collection isn't stored yet: its absence from storage doesn't mean it was deleted.
   if (!changes.collections || isNew) return;
   const fresh = changes.collections.newValue?.[id];

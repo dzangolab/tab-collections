@@ -1,4 +1,4 @@
-// End-to-end flows in Chromium (X1–X12 in docs/testing-plan.md, except X11). Run `npm run build` first
+// End-to-end flows in Chromium (X1–X13 in docs/testing-plan.md, except X11). Run `npm run build` first
 // (`npm run test:e2e` does).
 import { expect, test } from './fixtures.js';
 
@@ -144,4 +144,18 @@ test('X12 a 50-page window closes promptly with one prompt', async ({ ext, site 
   await expect(cardToggle(list, 'Fifty')).not.toBeChecked();
   expect(await ext.promptWindows()).toHaveLength(1);
   expect(Object.values(await ext.get('pending'))).toHaveLength(1);
+});
+
+test('X13 the Sync panel loads in a real browser, with GitHub and its defaults; <owner> must be replaced, and typing replaces just it', async ({ ext }) => {
+  const page = await ext.open('collections.html');
+  const panel = page.locator('#syncPanel');
+  const repo = panel.locator('[name=repo]');
+  await expect(panel.locator('select[name=backend]')).toHaveValue('github');
+  await expect(page.locator('#sync')).toBeHidden();
+  await panel.locator('[name=token]').fill('secret');
+  await panel.locator('button[type=submit]').click();
+  await expect(page.locator('#toast')).toHaveText('Replace <owner> with your user or organisation name.');
+  await repo.click();
+  await page.keyboard.type('me');
+  await expect(repo).toHaveValue('me/tab-collections');
 });
