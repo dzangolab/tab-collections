@@ -4,7 +4,7 @@ The extension's store listing and its images (Chrome Web Store first).
 
 ## Listing
 
-`listing.json` holds everything to enter in the Chrome Web Store Developer Dashboard: name, summary, description, category, the images, the privacy answers (single purpose, permission justifications, data usage, certifications) and distribution. `null` marks what's still to decide: the privacy policy URL. The homepage and support URLs point to the GitHub repository, which must be public for them to work. The summary must match `description` in the manifest (`build.mjs`).
+`listing.json` holds everything to enter in the Chrome Web Store Developer Dashboard: name, summary, description, category, the images, the privacy answers (single purpose, permission justifications, data usage, certifications) and distribution. The privacy policy is [`PRIVACY.md`](../PRIVACY.md) at the repository root. The homepage, support and privacy policy URLs point to the GitHub repository, which must be public for them to work. The summary must match `description` in the manifest (`build.mjs`).
 
 ## Icon
 
