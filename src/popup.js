@@ -1,6 +1,6 @@
 import {
   api, getCollections, getAll, makeCollection, putCollection, cleanPages, el, send, openManagerPage, plural,
-  vivaldiData, hasVivaldiData, workspaceKey, suggestName,
+  vivaldiData, hasVivaldiData, workspaceKey, suggestName, syncButton, syncStatusText,
 } from './common.js';
 
 const $ = (s) => document.getElementById(s);
@@ -156,5 +156,17 @@ async function showCollectionWindow(windowId) {
   });
 }
 
+// Sync status and button, when sync is set up.
+async function showSync() {
+  const st = await send({ type: 'syncStatus' }).catch(() => null);
+  $('syncRow').hidden = !st?.configured;
+  if (!st?.configured) return;
+  $('syncText').textContent = syncStatusText(st);
+  $('syncText').title = syncStatusText(st);
+  // After a sync, the status line shows the result, or the error.
+  $('syncRow').replaceChildren($('syncText'), syncButton(() => showSync()));
+}
+
+showSync();
 $('manage').addEventListener('click', (e) => { e.preventDefault(); openManagerPage().then(() => window.close()); });
 init();

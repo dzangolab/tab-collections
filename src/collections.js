@@ -1,8 +1,9 @@
 import {
   api, getCollections, saveCollections, getVivaldiWorkspaces, workspaceCreated, suggestName, removeCollection, makeCollection, hasPages, getAll,
   buildExport, parseImport, downloadJson, el, icon, send, plural, getSettings, saveSetting,
-  closedDrift, collectionDrift,
+  closedDrift, collectionDrift, conflictStrip, syncButton, syncStatusText, warnStrip,
 } from './common.js';
+import { renderSyncPanel } from './sync-settings.js';
 
 const cards = document.getElementById('cards');
 const empty = document.getElementById('empty');
@@ -20,10 +21,12 @@ function toast(msg) {
 const thisWindow = api.tabs.getCurrent().then((t) => t?.windowId).catch(() => null);
 
 async function render() {
-  const [cols, sessions, windowId, closed, live] = await Promise.all([
+  const [cols, sessions, windowId, closed, live, sync] = await Promise.all([
     getCollections(), getAll('sessions', {}), thisWindow, closedDrift(),
     send({ type: 'driftStatus' }).catch(() => ({})),
+    send({ type: 'syncStatus' }).catch(() => ({ configured: false })),
   ]);
+  renderSync(sync);
   const currentId = sessions[windowId]?.collectionId;
   const q = filter.value.trim().toLowerCase();
   const all = Object.values(cols).sort((a, b) => a.name.localeCompare(b.name));
@@ -33,7 +36,8 @@ async function render() {
     const open = c.id in live; // pruned of windows that are already gone
     const current = c.id === currentId;
     const strip = collectionDrift(c.id, closed, live, toast);
-    return el('article', { class: ['card', current && 'current', strip && 'drifted'].filter(Boolean).join(' ') },
+    const conflict = conflictStrip(c.id, sync, toast);
+    return el('article', { class: ['card', current && 'current', (strip || conflict) && 'drifted'].filter(Boolean).join(' ') },
       el('div', { class: 'card-top' },
         el('a', { class: 'card-name', href: `collection.html?id=${encodeURIComponent(c.id)}` }, c.name),
         current && el('span', { class: 'badge-current' }, 'This window'),
@@ -63,11 +67,34 @@ async function render() {
             }
           },
         }, icon('delete'))),
+      conflict,
       strip,
     );
   }));
   empty.hidden = all.length > 0;
   document.getElementById('noMatch').hidden = !(all.length && !list.length);
+}
+
+// ---------- Sync ----------
+
+const syncPanel = document.getElementById('syncPanel');
+const syncBtn = document.getElementById('sync');
+syncBtn.replaceWith(syncButton(toast, { id: 'sync', hidden: true }));
+
+// The top bar's Sync button and status, the notice strip, and the Sync panel. The setup form is
+// only drawn when it isn't there yet, so a re-render doesn't wipe what the user is typing.
+function renderSync(st) {
+  const on = !!st?.configured;
+  const btn = document.getElementById('sync');
+  const status = document.getElementById('syncStatus');
+  btn.hidden = !on;
+  status.hidden = !on;
+  status.textContent = syncStatusText(st);
+  const notice = on && (st.lastError
+    ? warnStrip(`Sync failed: ${st.lastError}`, syncButton(toast, { class: 'primary' }))
+    : st.remoteChanged && warnStrip('Collections were changed on another device', syncButton(toast, { class: 'primary' })));
+  document.getElementById('syncNotice').replaceChildren(...(notice ? [notice] : []));
+  if (on || !syncPanel.querySelector('form')) renderSyncPanel(syncPanel, st, toast);
 }
 
 // The toggle opens the collection's window, or closes it.

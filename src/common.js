@@ -343,6 +343,16 @@ export function icon(name, size = 16) {
 // closed window: the extension never closes tabs of an open one. No `onUpdate` when the window has
 // no pages left.
 export function driftStrip({ onDetails, onUpdate, onRestore }) {
+  return warnStrip(onRestore
+    ? 'The tabs in this collection’s window changed before it was closed'
+    : 'The tabs in this collection’s window have changed',
+  el('button', { onclick: onDetails }, 'Details'),
+  onUpdate && el('button', { class: 'primary', onclick: onUpdate }, 'Update'),
+  onRestore && el('button', { onclick: onRestore }, 'Restore'));
+}
+
+// A yellow strip with a warning sign, a message and buttons.
+export function warnStrip(message, ...buttons) {
   const ns = 'http://www.w3.org/2000/svg';
   const warn = document.createElementNS(ns, 'svg');
   warn.setAttribute('viewBox', '0 0 16 14');
@@ -358,14 +368,7 @@ export function driftStrip({ onDetails, onUpdate, onRestore }) {
     for (const [k, v] of Object.entries(attrs)) path.setAttribute(k, v);
     warn.append(path);
   }
-  return el('div', { class: 'drift-strip' },
-    warn,
-    el('span', { class: 'drift-msg' }, onRestore
-      ? 'The tabs in this collection’s window changed before it was closed'
-      : 'The tabs in this collection’s window have changed'),
-    el('button', { onclick: onDetails }, 'Details'),
-    onUpdate && el('button', { class: 'primary', onclick: onUpdate }, 'Update'),
-    onRestore && el('button', { onclick: onRestore }, 'Restore'));
+  return el('div', { class: 'drift-strip' }, warn, el('span', { class: 'drift-msg' }, message), ...buttons);
 }
 
 // The drift strip for a collection, if its window's tabs have changed: undecided changes of a
@@ -432,6 +435,52 @@ export const VIVALDI_NOTE = 'In Vivaldi, a window includes the tabs of all its w
 // Whether the browser is Vivaldi, as far as tabs tell: some versions add `vivExtData` to each tab.
 export async function isVivaldi() {
   try { return hasVivaldiData(await api.tabs.query({})); } catch { return false; }
+}
+
+// ---------- Sync (status and conflicts; the engine is src/sync/engine.js) ----------
+
+export function timeAgo(ms, now = Date.now()) {
+  const s = Math.round((now - ms) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(ms).toLocaleDateString();
+}
+
+// One line for the Sync button's neighbourhood: the most important thing first.
+export function syncStatusText(st) {
+  if (!st?.configured) return '';
+  if (st.lastError) return `Sync failed: ${st.lastError}`;
+  const n = Object.keys(st.conflicts || {}).length;
+  if (n) return `${plural(n, 'collection')} changed on another device too: choose which version to keep`;
+  if (st.remoteChanged) return 'Changes from another device are waiting: click Sync';
+  if (st.unsynced) return st.mode === 'manual' ? 'Local changes not synced yet' : 'Syncing local changes…';
+  return st.lastSyncAt ? `Synced ${timeAgo(st.lastSyncAt)}` : 'Not synced yet';
+}
+
+// The Sync button: pulls, merges and pushes. `onDone` re-renders.
+export function syncButton(notify, extra = {}) {
+  return el('button', {
+    ...extra,
+    onclick: async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      try { await send({ type: 'syncNow' }); notify('Synced'); } catch (err) { notify(err.message); } finally { b.disabled = false; }
+    },
+  }, 'Sync');
+}
+
+// The strip on a collection changed on this device and another one since the last sync.
+export function conflictStrip(id, status, notify) {
+  const c = status?.conflicts?.[id];
+  if (!c) return null;
+  const choose = (choice, done) => () => send({ type: 'syncResolve', id, choice }).then(() => notify(done), (e) => notify(e.message));
+  return warnStrip(c.theirs
+    ? `This collection was changed on another device too (there: “${c.theirs.name}”, ${plural(c.theirs.pages.length, 'page')})`
+    : 'This collection was deleted on another device, and changed on this one',
+  el('button', { onclick: choose('mine', 'Kept this device’s version') }, 'Keep mine'),
+  el('button', { onclick: choose('theirs', c.theirs ? 'Took the other device’s version' : 'Collection deleted') }, c.theirs ? 'Keep theirs' : 'Delete'),
+  c.theirs && el('button', { onclick: choose('both', 'Kept both: this device’s version is now a copy') }, 'Keep both'));
 }
 
 export async function send(msg) {

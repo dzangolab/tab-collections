@@ -18,6 +18,8 @@
     <h2>Collections</h2>
     <div class="spacer"></div>
     <input type="search" id="filter" placeholder="Filter…" aria-label="Filter collections" style="width: 200px">
+    <span id="syncStatus" class="muted small sync-status" hidden></span>
+    <button id="sync" hidden>Sync</button>
     <button id="vivaldi" hidden>From Vivaldi workspaces…</button>
     <button id="import">Import…</button>
     <button id="export">Export</button>
@@ -25,6 +27,7 @@
     <input type="file" id="importFile" accept=".json,application/json" hidden>
   </div>
 
+  <div id="syncNotice"></div>
   <div class="cards" id="cards"></div>
   <p class="muted" id="noMatch" hidden>No collections match the filter.</p>
   <div id="empty" class="panel empty" hidden>
@@ -40,7 +43,9 @@
       <option value="keep">Keep collection unchanged</option>
     </select>
   </div>
-  <p class="muted small">Collections are stored only in this browser. Use Export to back up or share them as a file.</p>
+  <h2>Sync</h2>
+  <div class="panel sync-panel" id="syncPanel"></div>
+  <p class="muted small" id="storageNote">Collections are stored only in this browser, unless you set up sync above. Use Export to back up or share them as a file.</p>
 </main>
 <dialog id="wsDialog">
   <form method="dialog" id="wsForm">
