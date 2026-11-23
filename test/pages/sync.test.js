@@ -187,3 +187,57 @@ test('Y10 the popup: a Sync row only when sync is set up', async () => {
   await settle();
   assert.ok(sentTypes(page).includes('syncNow'));
 });
+
+describe('Y11 Edit settings', () => {
+  const config = {
+    backend: 'github', server: 'https://github.com', repo: 'me/tabs', branch: 'main', path: 'tab-collections.json',
+    token: 'secret-token', passphrase: 'pass', mode: 'manual',
+  };
+  async function editing(handlers = {}) {
+    fake.store.syncConfig = config;
+    const page = await openCollections(connected({ encrypted: true, mode: 'manual' }), { syncUpdate: ok(), ...handlers });
+    fire(button(page.$('syncPanel'), 'Edit settings'), 'click');
+    await settle();
+    return page;
+  }
+
+  test('the form, filled in with the current settings, token and passphrase included', async () => {
+    const page = await editing();
+    const panel = page.$('syncPanel');
+    assert.match(text(panel), /Edit sync settings/);
+    assert.deepEqual(['backend', 'server', 'repo', 'branch', 'path', 'token', 'passphrase', 'passphrase2', 'mode'].map((n) => input(page, n).value),
+      ['github', 'https://github.com', 'me/tabs', 'main', 'tab-collections.json', 'secret-token', 'pass', 'pass', 'manual']);
+    assert.equal(input(page, 'encrypt').checked, true);
+    assert.equal(input(page, 'token').type, 'password', 'hidden until the eye is clicked');
+    assert.deepEqual([...panel.querySelectorAll('.row button')].map(text), ['Save', 'Cancel']);
+  });
+
+  test('a re-render while editing (after a sync, say) keeps what the user typed', async () => {
+    const page = await editing();
+    setValue(input(page, 'token'), 'typing…');
+    fake.store.syncState = { lastSyncAt: Date.now() };
+    await fake.api.storage.local.set({ syncState: { lastSyncAt: Date.now() } });
+    await settle();
+    assert.equal(input(page, 'token').value, 'typing…');
+  });
+
+  test('Save sends the new settings, then shows the connected panel again', async () => {
+    const page = await editing();
+    setValue(input(page, 'token'), 'new-token');
+    submit(page.$('syncPanel').querySelector('form'));
+    await settle();
+    const sent = page.sent.find((m) => m.type === 'syncUpdate');
+    assert.deepEqual([sent.config.token, sent.config.passphrase, sent.config.mode], ['new-token', 'pass', 'manual']);
+    assert.ok(!sentTypes(page).includes('syncSetup'));
+    assert.equal(toast(page), 'Sync settings saved');
+    assert.ok(button(page.$('syncPanel'), 'Edit settings'), 'back to the connected panel');
+  });
+
+  test('Cancel goes back without saving', async () => {
+    const page = await editing();
+    fire(button(page.$('syncPanel'), 'Cancel'), 'click');
+    await settle();
+    assert.ok(button(page.$('syncPanel'), 'Edit settings'));
+    assert.ok(!sentTypes(page).includes('syncUpdate'));
+  });
+});

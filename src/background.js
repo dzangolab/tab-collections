@@ -6,7 +6,7 @@ import {
 } from './common.js';
 import {
   CHECK_ALARM, disconnectSync, ensureAlarm, onLocalChange, refreshBadge, resolveConflict, scheduledCheck, setSyncMode,
-  setupSync, syncNow, syncStatus,
+  setupSync, syncNow, syncStatus, updateSyncConfig,
 } from './sync/engine.js';
 
 const SETTLE_WINDOW_MS = 60_000; // redirects within this time after opening are not "changes"
@@ -347,6 +347,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'syncResolve': return resolveConflict(msg.id, msg.choice);
       case 'syncSetup': return setupSync(msg.config);
       case 'syncStatus': return syncStatus();
+      case 'syncUpdate': return updateSyncConfig(msg.config);
       default: throw new Error(`Unknown message: ${msg?.type}`);
     }
   })().then(

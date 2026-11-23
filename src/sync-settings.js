@@ -1,7 +1,8 @@
 // The Sync panel on the Collections page: the setup form, or, once set up, where it syncs, the
-// mode, the status, Sync and Disconnect.
+// mode, the status, Sync, Edit settings and Disconnect. Edit settings shows the setup form filled
+// in with the current settings.
 
-import { api, el, icon, send, syncButton, syncStatusText } from './common.js';
+import { api, el, getAll, icon, send, syncButton, syncStatusText } from './common.js';
 import { BACKENDS, originsFor } from './sync/backends.js';
 import { normalizeConfig, OWNER, REPO_TEMPLATE } from './sync/engine.js';
 
@@ -32,11 +33,28 @@ export function revealable(input, name) {
   return el('span', { class: 'secret-input' }, input, button);
 }
 
+// While the user edits the settings (`panel.dataset.editing`), re-renders (after each sync, for
+// example) leave the form alone.
 export function renderSyncPanel(panel, status, notify) {
-  panel.replaceChildren(status?.configured ? connected(status, notify) : setupForm(notify));
+  if (!status?.configured) delete panel.dataset.editing;
+  else if (panel.dataset.editing) return;
+  panel.replaceChildren(status?.configured ? connected(panel, status, notify) : setupForm(notify));
 }
 
-function connected(st, notify) {
+async function refresh(panel, notify) {
+  renderSyncPanel(panel, await send({ type: 'syncStatus' }).catch(() => ({ configured: false })), notify);
+}
+
+async function edit(panel, notify) {
+  const current = await getAll('syncConfig', null);
+  if (!current) return refresh(panel, notify);
+  panel.dataset.editing = 'true';
+  const done = () => { delete panel.dataset.editing; refresh(panel, notify); };
+  panel.replaceChildren(setupForm(notify, { current, done }));
+  panel.querySelector('input:not([type=hidden])')?.focus();
+}
+
+function connected(panel, st, notify) {
   const mode = el('select', {
     'aria-label': 'Sync mode',
     onchange: (e) => send({ type: 'syncMode', mode: e.target.value }).then(() => notify('Sync mode saved'), (err) => notify(err.message)),
@@ -50,6 +68,7 @@ function connected(st, notify) {
     el('div', { class: 'row wrap' },
       mode,
       syncButton(notify, { class: 'primary' }),
+      el('button', { onclick: () => edit(panel, notify) }, 'Edit settings'),
       el('button', {
         class: 'danger',
         onclick: async () => {
@@ -59,11 +78,15 @@ function connected(st, notify) {
       }, 'Disconnect')));
 }
 
-function setupForm(notify) {
+// The setup form. With `current` (Edit settings): filled in with those settings, Save and Cancel
+// instead of Connect, and `done` called when it's saved or cancelled.
+function setupForm(notify, { current = null, done = null } = {}) {
+  const cur = current || {};
+  const chosen = cur.backend || 'github';
   const backend = el('select', { name: 'backend' },
-    ...Object.entries(BACKENDS).map(([k, b]) => el('option', { value: k, selected: k === 'github' }, b.label)));
+    ...Object.entries(BACKENDS).map(([k, b]) => el('option', { value: k, selected: k === chosen }, b.label)));
   // Filled in with the usual values; `<owner>` has to be replaced (normalizeConfig checks).
-  const server = el('input', { type: 'url', name: 'server', value: BACKENDS.github.defaultServer });
+  const server = el('input', { type: 'url', name: 'server', value: cur.server || BACKENDS[chosen].defaultServer || BACKENDS.github.defaultServer });
   // Clicking or tabbing into the repository selects `<owner>`, ready to be typed over. On click,
   // after the mouse-up, which would otherwise put the cursor where the user clicked.
   const selectOwner = (e) => {
@@ -71,23 +94,24 @@ function setupForm(notify) {
     if (i >= 0 && e.target.selectionStart === e.target.selectionEnd) e.target.setSelectionRange(i, i + OWNER.length);
   };
   const repo = el('input', {
-    type: 'text', name: 'repo', value: REPO_TEMPLATE, autocomplete: 'off',
+    type: 'text', name: 'repo', value: cur.repo || REPO_TEMPLATE, autocomplete: 'off',
     onclick: selectOwner,
     onfocus: (e) => setTimeout(() => selectOwner(e)),
   });
-  const branch = el('input', { type: 'text', name: 'branch', value: 'main' });
-  const path = el('input', { type: 'text', name: 'path', value: 'tab-collections.json' });
-  const url = el('input', { type: 'url', name: 'url', placeholder: 'https://cloud.example/remote.php/dav/files/me/tab-collections.json' });
-  const username = el('input', { type: 'text', name: 'username', autocomplete: 'username' });
-  const token = el('input', { type: 'password', name: 'token', autocomplete: 'off' });
+  const branch = el('input', { type: 'text', name: 'branch', value: cur.branch || 'main' });
+  const path = el('input', { type: 'text', name: 'path', value: cur.path || 'tab-collections.json' });
+  const url = el('input', { type: 'url', name: 'url', value: cur.url || '', placeholder: 'https://cloud.example/remote.php/dav/files/me/tab-collections.json' });
+  const username = el('input', { type: 'text', name: 'username', value: cur.username || '', autocomplete: 'username' });
+  const token = el('input', { type: 'password', name: 'token', value: cur.token || '', autocomplete: 'off' });
   const tokenHelp = el('p', { class: 'muted small help' });
-  const encrypt = el('input', { type: 'checkbox', name: 'encrypt' });
-  const passphrase = el('input', { type: 'password', name: 'passphrase', autocomplete: 'new-password' });
-  const passphrase2 = el('input', { type: 'password', name: 'passphrase2', autocomplete: 'new-password' });
+  const encrypt = el('input', { type: 'checkbox', name: 'encrypt', checked: !!cur.passphrase });
+  const passphrase = el('input', { type: 'password', name: 'passphrase', value: cur.passphrase || '', autocomplete: 'new-password' });
+  const passphrase2 = el('input', { type: 'password', name: 'passphrase2', value: cur.passphrase || '', autocomplete: 'new-password' });
   const mode = el('select', { name: 'mode' },
-    el('option', { value: 'auto' }, 'Automatic: sync every change'),
-    el('option', { value: 'manual' }, 'Manual: sync when I click Sync'));
-  const connect = el('button', { type: 'submit', class: 'primary' }, 'Connect');
+    el('option', { value: 'auto', selected: cur.mode !== 'manual' }, 'Automatic: sync every change'),
+    el('option', { value: 'manual', selected: cur.mode === 'manual' }, 'Manual: sync when I click Sync'));
+  const connect = el('button', { type: 'submit', class: 'primary' }, current ? 'Save' : 'Connect');
+  const cancel = current && el('button', { type: 'button', onclick: done }, 'Cancel');
 
   const git = el('div', { class: 'grid' },
     field('Server', server),
@@ -98,7 +122,8 @@ function setupForm(notify) {
     field('File address', url, 'The full address of the sync file. Its folder must exist; the file is created on the first sync.'),
     field('Username', username));
   const secret = el('div', { class: 'grid', hidden: true },
-    field('Passphrase', revealable(passphrase, () => 'passphrase'), 'Every device that syncs with this file needs the same passphrase. If you lose it, the synced copy can’t be read.'),
+    field('Passphrase', revealable(passphrase, () => 'passphrase'), 'Every device that syncs with this file needs the same passphrase. If you lose it, the synced copy can’t be read.'
+      + (current ? ' Changing it re-encrypts the sync file: then enter the new one on your other devices too.' : '')),
     field('Passphrase again', revealable(passphrase2, () => 'passphrase')));
   const tokenLabel = el('span', {}, 'Access token');
 
@@ -118,14 +143,16 @@ function setupForm(notify) {
   update();
 
   const form = el('form', { class: 'sync-form' },
-    el('p', { class: 'muted small' }, 'Sync your collections with other browsers and devices through a repository or a WebDAV server you own. Nobody else, including us, gets your data.'),
+    current
+      ? el('h3', { class: 'sync-edit-title' }, 'Edit sync settings')
+      : el('p', { class: 'muted small' }, 'Sync your collections with other browsers and devices through a repository or a WebDAV server you own. Nobody else, including us, gets your data.'),
     field('Where', backend),
     git, dav,
     el('div', { class: 'field' }, el('label', {}, tokenLabel, revealable(token, () => tokenLabel.textContent)), tokenHelp),
     el('div', { class: 'field' }, el('label', { class: 'check' }, encrypt, 'Encrypt the sync file with a passphrase')),
     secret,
     field('Mode', mode, 'Checks for changes from other devices at browser start and every 5 minutes, in both modes.'),
-    el('div', { class: 'row' }, connect));
+    el('div', { class: 'row' }, connect, cancel));
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -147,8 +174,9 @@ function setupForm(notify) {
     connect.disabled = true;
     asked.then(async (granted) => {
       if (!granted) throw new Error('Sync needs access to that server.');
-      await send({ type: 'syncSetup', config: cfg });
-      notify('Sync is set up');
+      await send({ type: current ? 'syncUpdate' : 'syncSetup', config: cfg });
+      notify(current ? 'Sync settings saved' : 'Sync is set up');
+      done?.();
     }).catch((err) => notify(err.message)).finally(() => { connect.disabled = false; });
   });
   return form;
