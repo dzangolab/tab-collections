@@ -145,6 +145,10 @@ const FIELDS = {
   webdav: ['url', 'username', 'token'],
 };
 
+// The setup form's repository value until the user puts their own user or organisation in.
+export const OWNER = '<owner>';
+export const REPO_TEMPLATE = `${OWNER}/tab-collections`;
+
 export function normalizeConfig(input) {
   const backend = input?.backend;
   if (!FIELDS[backend]) throw new Error('Choose where to sync.');
@@ -154,6 +158,7 @@ export function normalizeConfig(input) {
     cfg.server = cfg.server.replace(/\/+$/, '') || BACKENDS[backend].defaultServer;
     cfg.branch ||= 'main';
     cfg.path = cfg.path.replace(/^\/+/, '') || 'tab-collections.json';
+    if (cfg.repo.includes(OWNER)) throw new Error(`Replace ${OWNER} with your user or organisation name.`);
     if (!/^[^/\s]+(\/[^/\s]+)+$/.test(cfg.repo)) throw new Error('Enter the repository as owner/name.');
   }
   const address = backend === 'webdav' ? cfg.url : cfg.server;

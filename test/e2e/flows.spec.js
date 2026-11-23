@@ -146,13 +146,16 @@ test('X12 a 50-page window closes promptly with one prompt', async ({ ext, site 
   expect(Object.values(await ext.get('pending'))).toHaveLength(1);
 });
 
-test('X13 the Sync panel loads in a real browser, with GitHub preselected, and checks its settings', async ({ ext }) => {
+test('X13 the Sync panel loads in a real browser, with GitHub and its defaults; <owner> must be replaced, and typing replaces just it', async ({ ext }) => {
   const page = await ext.open('collections.html');
   const panel = page.locator('#syncPanel');
+  const repo = panel.locator('[name=repo]');
   await expect(panel.locator('select[name=backend]')).toHaveValue('github');
   await expect(page.locator('#sync')).toBeHidden();
-  await panel.locator('[name=repo]').fill('no-slash');
   await panel.locator('[name=token]').fill('secret');
   await panel.locator('button[type=submit]').click();
-  await expect(page.locator('#toast')).toHaveText('Enter the repository as owner/name.');
+  await expect(page.locator('#toast')).toHaveText('Replace <owner> with your user or organisation name.');
+  await repo.click();
+  await page.keyboard.type('me');
+  await expect(repo).toHaveValue('me/tab-collections');
 });

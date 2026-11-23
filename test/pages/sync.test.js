@@ -81,6 +81,21 @@ describe('Y1–Y4 setup form', () => {
     assert.match(toast(page), /needs access to that server/);
     assert.ok(!sentTypes(page).includes('syncSetup'));
   });
+
+  test('Y4b filled-in defaults; <owner> must be replaced; the server follows the backend unless typed', async () => {
+    const page = await openCollections({ configured: false }, { syncSetup: ok() });
+    assert.deepEqual(['server', 'repo', 'branch', 'path'].map((n) => input(page, n).value),
+      ['https://github.com', '<owner>/tab-collections', 'main', 'tab-collections.json']);
+    setValue(input(page, 'token'), 'secret');
+    submit(page.$('syncPanel').querySelector('form'));
+    await settle();
+    assert.equal(toast(page), 'Replace <owner> with your user or organisation name.');
+    setValue(input(page, 'backend'), 'gitlab', 'change');
+    assert.equal(input(page, 'server').value, 'https://gitlab.com');
+    setValue(input(page, 'server'), 'https://git.mine.example');
+    setValue(input(page, 'backend'), 'gitea', 'change');
+    assert.equal(input(page, 'server').value, 'https://git.mine.example');
+  });
 });
 
 describe('Y5–Y8 set up', () => {

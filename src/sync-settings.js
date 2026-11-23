@@ -3,7 +3,7 @@
 
 import { api, el, send, syncButton, syncStatusText } from './common.js';
 import { BACKENDS, originsFor } from './sync/backends.js';
-import { normalizeConfig } from './sync/engine.js';
+import { normalizeConfig, OWNER, REPO_TEMPLATE } from './sync/engine.js';
 
 const TOKEN_HELP = {
   github: 'A fine-grained personal access token with access to only this repository, and the “Contents: read and write” permission.',
@@ -46,10 +46,21 @@ function connected(st, notify) {
 function setupForm(notify) {
   const backend = el('select', { name: 'backend' },
     ...Object.entries(BACKENDS).map(([k, b]) => el('option', { value: k, selected: k === 'github' }, b.label)));
-  const server = el('input', { type: 'url', name: 'server', placeholder: 'https://github.com' });
-  const repo = el('input', { type: 'text', name: 'repo', placeholder: 'owner/tab-collections', autocomplete: 'off' });
-  const branch = el('input', { type: 'text', name: 'branch', placeholder: 'main' });
-  const path = el('input', { type: 'text', name: 'path', placeholder: 'tab-collections.json' });
+  // Filled in with the usual values; `<owner>` has to be replaced (normalizeConfig checks).
+  const server = el('input', { type: 'url', name: 'server', value: BACKENDS.github.defaultServer });
+  // Clicking or tabbing into the repository selects `<owner>`, ready to be typed over. On click,
+  // after the mouse-up, which would otherwise put the cursor where the user clicked.
+  const selectOwner = (e) => {
+    const i = e.target.value.indexOf(OWNER);
+    if (i >= 0 && e.target.selectionStart === e.target.selectionEnd) e.target.setSelectionRange(i, i + OWNER.length);
+  };
+  const repo = el('input', {
+    type: 'text', name: 'repo', value: REPO_TEMPLATE, autocomplete: 'off',
+    onclick: selectOwner,
+    onfocus: (e) => setTimeout(() => selectOwner(e)),
+  });
+  const branch = el('input', { type: 'text', name: 'branch', value: 'main' });
+  const path = el('input', { type: 'text', name: 'path', value: 'tab-collections.json' });
   const url = el('input', { type: 'url', name: 'url', placeholder: 'https://cloud.example/remote.php/dav/files/me/tab-collections.json' });
   const username = el('input', { type: 'text', name: 'username', autocomplete: 'username' });
   const token = el('input', { type: 'password', name: 'token', autocomplete: 'off' });
@@ -75,11 +86,13 @@ function setupForm(notify) {
     field('Passphrase again', passphrase2));
   const tokenLabel = el('span', {}, 'Access token');
 
+  // Switching backend swaps the server for the new backend's, unless the user typed their own.
+  const defaults = new Set(Object.values(BACKENDS).map((b) => b.defaultServer));
   const update = () => {
     const b = backend.value;
     git.hidden = b === 'webdav';
     dav.hidden = b !== 'webdav';
-    server.placeholder = BACKENDS[b].defaultServer;
+    if (b !== 'webdav' && defaults.has(server.value.trim())) server.value = BACKENDS[b].defaultServer;
     tokenLabel.textContent = b === 'webdav' ? 'Password' : 'Access token';
     tokenHelp.textContent = TOKEN_HELP[b];
     secret.hidden = !encrypt.checked;
