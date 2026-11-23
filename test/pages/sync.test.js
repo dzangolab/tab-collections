@@ -96,6 +96,29 @@ describe('Y1–Y4 setup form', () => {
     setValue(input(page, 'backend'), 'gitea', 'change');
     assert.equal(input(page, 'server').value, 'https://git.mine.example');
   });
+
+  test('Y4c the token and both passphrases have an eye button that shows the value, then hides it', async () => {
+    const page = await openCollections({ configured: false });
+    for (const name of ['token', 'passphrase', 'passphrase2']) {
+      const field = input(page, name);
+      const eye = field.parentElement.querySelector('button.reveal');
+      assert.equal(field.type, 'password');
+      assert.equal(eye.type, 'button', 'never submits the form');
+      fire(eye, 'click');
+      assert.equal(field.type, 'text');
+      assert.equal(eye.getAttribute('aria-pressed'), 'true');
+      assert.match(eye.getAttribute('aria-label'), /^Hide the /);
+      fire(eye, 'click');
+      assert.equal(field.type, 'password');
+      assert.match(eye.getAttribute('aria-label'), /^Show the /);
+    }
+    const tokenEye = input(page, 'token').parentElement.querySelector('button.reveal');
+    assert.equal(tokenEye.getAttribute('aria-label'), 'Show the access token');
+    setValue(input(page, 'backend'), 'webdav', 'change');
+    fire(tokenEye, 'click');
+    assert.equal(tokenEye.getAttribute('aria-label'), 'Hide the password', 'follows the field’s label');
+    assert.ok(!sentTypes(page).includes('syncSetup'));
+  });
 });
 
 describe('Y5–Y8 set up', () => {

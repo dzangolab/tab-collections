@@ -1,7 +1,7 @@
 // The Sync panel on the Collections page: the setup form, or, once set up, where it syncs, the
 // mode, the status, Sync and Disconnect.
 
-import { api, el, send, syncButton, syncStatusText } from './common.js';
+import { api, el, icon, send, syncButton, syncStatusText } from './common.js';
 import { BACKENDS, originsFor } from './sync/backends.js';
 import { normalizeConfig, OWNER, REPO_TEMPLATE } from './sync/engine.js';
 
@@ -14,6 +14,22 @@ const TOKEN_HELP = {
 
 function field(label, input, help) {
   return el('div', { class: 'field' }, el('label', {}, label, input), help && el('p', { class: 'muted small help' }, help));
+}
+
+// A password input with an eye button that shows the value in clear text, and hides it again.
+// `name()`: what the input holds, for the button's label.
+export function revealable(input, name) {
+  const button = el('button', { type: 'button', class: 'icon-btn ghost reveal', 'aria-pressed': 'false' });
+  const show = (on) => {
+    input.type = on ? 'text' : 'password';
+    button.setAttribute('aria-pressed', String(on));
+    button.setAttribute('aria-label', `${on ? 'Hide' : 'Show'} the ${name().toLowerCase()}`);
+    button.title = on ? 'Hide' : 'Show';
+    button.replaceChildren(icon(on ? 'eyeOff' : 'eye'));
+  };
+  button.addEventListener('click', () => show(input.type === 'password'));
+  show(false);
+  return el('span', { class: 'secret-input' }, input, button);
 }
 
 export function renderSyncPanel(panel, status, notify) {
@@ -82,8 +98,8 @@ function setupForm(notify) {
     field('File address', url, 'The full address of the sync file. Its folder must exist; the file is created on the first sync.'),
     field('Username', username));
   const secret = el('div', { class: 'grid', hidden: true },
-    field('Passphrase', passphrase, 'Every device that syncs with this file needs the same passphrase. If you lose it, the synced copy can’t be read.'),
-    field('Passphrase again', passphrase2));
+    field('Passphrase', revealable(passphrase, () => 'passphrase'), 'Every device that syncs with this file needs the same passphrase. If you lose it, the synced copy can’t be read.'),
+    field('Passphrase again', revealable(passphrase2, () => 'passphrase')));
   const tokenLabel = el('span', {}, 'Access token');
 
   // Switching backend swaps the server for the new backend's, unless the user typed their own.
@@ -105,7 +121,7 @@ function setupForm(notify) {
     el('p', { class: 'muted small' }, 'Sync your collections with other browsers and devices through a repository or a WebDAV server you own. Nobody else, including us, gets your data.'),
     field('Where', backend),
     git, dav,
-    el('div', { class: 'field' }, el('label', {}, tokenLabel, token), tokenHelp),
+    el('div', { class: 'field' }, el('label', {}, tokenLabel, revealable(token, () => tokenLabel.textContent)), tokenHelp),
     el('div', { class: 'field' }, el('label', { class: 'check' }, encrypt, 'Encrypt the sync file with a passphrase')),
     secret,
     field('Mode', mode, 'Checks for changes from other devices at browser start and every 5 minutes, in both modes.'),
