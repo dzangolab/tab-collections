@@ -1,5 +1,6 @@
 import {
-  api, getPending, resolvePending, getCollection, putCollection, makeCollection, diffPages, el, plural, send, getSettings,
+  api, diffPages, el, getCollection, getPending, getSettings, growthWarning, isVivaldi, makeCollection, plural,
+  putCollection, resolvePending, send, suspiciousGrowth, VIVALDI_NOTE,
 } from './common.js';
 
 const root = document.getElementById('root');
@@ -61,9 +62,13 @@ async function init() {
   // Compare against the URLs the saved pages actually resolved to (after redirects) when opened.
   const before = col.pages.map((p, i) => ({ ...p, url: pending.baseline?.[i] || p.url }));
   const { added, removed, reordered } = diffPages(before, pending.pages);
+  // Many more tabs than the collection had: probably tabs the user can't see (Vivaldi workspaces).
+  const suspicious = suspiciousGrowth(col.pages.length, pending.pages.length);
+  const vivaldi = await isVivaldi();
   // The setting decides which button is focused and highlighted; the other gets the plain style.
-  // Restore only for a closed window: the extension never closes tabs of an open one.
-  const updateByDefault = pending.live || (await getSettings()).closeDefault === 'update';
+  // Restore only for a closed window: the extension never closes tabs of an open one. Never
+  // Update by default when the growth is suspicious.
+  const updateByDefault = !suspicious && (pending.live || (await getSettings()).closeDefault === 'update');
   const updateButton = !noPages && el('button', { class: updateByDefault && 'primary', onclick: () => update(col) }, 'Update');
   const keepButton = !pending.live && el('button', { class: (!updateByDefault || noPages) && 'primary', onclick: discard }, 'Restore');
   // An open window without pages: nothing to choose; the collection stays as saved.
@@ -74,6 +79,8 @@ async function init() {
     el('p', {}, noPages
       ? `${theWindowHad} no pages left. A collection needs at least one page, so “${col.name}” can’t be updated with it.`
       : `The contents of the “${col.name}” window have changed. Do you want to update the collection?`),
+    suspicious && el('p', { class: 'warning', role: 'alert' }, growthWarning(col.pages.length, pending.pages.length)),
+    !suspicious && vivaldi && !noPages && el('p', { class: 'note' }, VIVALDI_NOTE),
     !!added.length && el('h2', {}, `${plural(added.length, 'page')} added`),
     !!added.length && el('ul', { class: 'changes' }, ...added.map((p) => pageLine(p, 'add', '+'))),
     !!removed.length && el('h2', {}, `${plural(removed.length, 'page')} removed`),
@@ -94,7 +101,8 @@ async function init() {
     el('input', { type: 'text', name: 'name', placeholder: `${col.name} (copy)` }),
     el('button', { type: 'submit', class: 'primary' }, 'Save')),
   ].filter(Boolean));
-  ((updateByDefault && updateButton) || keepButton || closeButton).focus();
+  // Nothing to focus for an open window whose growth is suspicious: the user should read first.
+  ((updateByDefault && updateButton) || keepButton || closeButton)?.focus?.();
 
   async function update(c) {
     busy = true;

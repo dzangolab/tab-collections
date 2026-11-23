@@ -249,6 +249,26 @@ describe('Collections page', () => {
       await settle();
       assert.deepEqual(page.sent.at(-1), { type: 'updateFromWindow', windowId: 4 });
     });
+    const many = Array.from({ length: 20 }, (_, i) => ({ url: `https://many.example/${i}`, title: '' }));
+    test('a closed drift that grows suspiciously: Update opens the review instead', async () => {
+      fake.store.pending = closedDrift(many);
+      const page = await loadPage('collections', { handlers: { driftStatus: ok({}) } });
+      fire([...card(page, 'Beta').querySelectorAll('.drift-strip button')][1], 'click');
+      await settle();
+      assert.deepEqual(fake.store.collections[beta.id].pages.map((x) => x.url), [B, C]);
+      assert.equal(fake.promptWindows().length, 1);
+      assert.equal(toast(page), 'Check the tabs before updating');
+    });
+    test('a live drift that grows suspiciously: Update asks for the review instead', async () => {
+      const page = await loadPage('collections', {
+        handlers: { driftStatus: ok({ [beta.id]: { windowId: 4, changed: true, count: 86, empty: false } }), reviewWindow: ok() },
+      });
+      fire([...card(page, 'Beta').querySelectorAll('.drift-strip button')][1], 'click');
+      await settle();
+      assert.deepEqual(page.sent.at(-1), { type: 'reviewWindow', windowId: 4 });
+      assert.ok(!sentTypes(page).includes('updateFromWindow'));
+      assert.equal(toast(page), 'Check the tabs before updating');
+    });
     test('a live drift with no pages left: Details only', async () => {
       const page = await loadPage('collections', { handlers: { driftStatus: ok({ [beta.id]: { windowId: 4, changed: true, empty: true } }) } });
       assert.deepEqual(buttons(card(page, 'Beta').querySelector('.drift-strip')), ['Details']);

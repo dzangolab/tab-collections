@@ -362,15 +362,27 @@ export function driftStrip({ onDetails, onUpdate, onRestore }) {
 // The drift strip for a collection, if its window's tabs have changed: undecided changes of a
 // closed window (`closed`, from closedDrift()), or its open window's tabs differing from it
 // (`live`, from the driftStatus message). `notify` shows a short message.
+// An Update that would grow the collection suspiciously opens the review instead, which shows the
+// warning and the full list of tabs.
 export function collectionDrift(id, closed, live, notify) {
   const failed = (e) => notify(e.message);
+  const checked = (count, review, update) => async () => {
+    const col = await getCollection(id);
+    if (col && suspiciousGrowth(col.pages.length, count)) {
+      await review();
+      notify('Check the tabs before updating');
+      return;
+    }
+    await update();
+    notify('Collection updated');
+  };
   const pending = closed[id];
   if (pending) {
     return driftStrip({
       onDetails: () => openReview(pending.id).catch(failed),
       // No Update when the window had no pages left: a collection needs at least one.
       onUpdate: pending.pages.length
-        ? () => updateFromPending(pending).then(() => notify('Collection updated'), failed)
+        ? () => checked(pending.pages.length, () => openReview(pending.id), () => updateFromPending(pending))().catch(failed)
         : null,
       onRestore: () => resolvePending(pending.id).then(() => notify('Collection restored'), failed),
     });
@@ -381,8 +393,36 @@ export function collectionDrift(id, closed, live, notify) {
     onDetails: () => send({ type: 'reviewWindow', windowId: w.windowId }).catch(failed),
     onUpdate: w.empty
       ? null
-      : () => send({ type: 'updateFromWindow', windowId: w.windowId }).then(() => notify('Collection updated'), failed),
+      : () => checked(
+        w.count ?? 0,
+        () => send({ type: 'reviewWindow', windowId: w.windowId }),
+        () => send({ type: 'updateFromWindow', windowId: w.windowId }),
+      )().catch(failed),
   });
+}
+
+// ---------- Unexpected growth ----------
+// The tabs the API reports for a window can include tabs the user can't see: in Vivaldi, a window
+// holds the tabs of every workspace shown in it. Saving many more tabs than the collection had is
+// more likely to have picked those up than to be what the user wants, so it asks first.
+export const GROWTH_MIN_ADDED = 10;
+
+export function suspiciousGrowth(before, after) {
+  return after - before > GROWTH_MIN_ADDED && after > 2 * before;
+}
+
+export function growthWarning(before, after) {
+  return `This window has ${plural(after, 'tab')}, but the collection has ${plural(before, 'page')}. `
+    + 'In browsers with workspaces, such as Vivaldi, a window also counts the tabs of its other '
+    + 'workspaces, even the ones you can’t see. Check the list before updating.';
+}
+
+export const VIVALDI_NOTE = 'In Vivaldi, a window includes the tabs of all its workspaces. Check the '
+  + 'list for tabs from other workspaces. To keep collections apart, open each one in a window of its own.';
+
+// Whether the browser is Vivaldi, as far as tabs tell: some versions add `vivExtData` to each tab.
+export async function isVivaldi() {
+  try { return hasVivaldiData(await api.tabs.query({})); } catch { return false; }
 }
 
 export async function send(msg) {
