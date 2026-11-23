@@ -43,6 +43,7 @@ Build the packages, then load the one for your browser.
 
 #### Building from source
 ```sh
+mise install         # installs the Node version in mise.toml (or use Node 24 by other means)
 npm install          # installs esbuild
 npm run build        # all targets → dist/
 node build.mjs safari   # or a single target: chromium | firefox | safari
