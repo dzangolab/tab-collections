@@ -26,7 +26,7 @@ Why these tools:
 - `happy-dom` is lighter and faster than jsdom, and these pages use only basic DOM.
 - Playwright can load an unpacked extension into Chromium only. Firefox and Safari stay manual: Playwright's Firefox can't load extensions, and Safari needs the Xcode host app.
 
-Pin every new dev dependency to an exact version, and set `save-exact=true` in `.npmrc`. `esbuild` is still `^0.28.2` and needs the same fix.
+Pin every new dev dependency to an exact version: `.npmrc` sets `save-exact=true`.
 
 ## Setup
 
