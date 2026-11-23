@@ -51,6 +51,8 @@ async function openCollection(id) {
   // then shows as drifted from the saved collection until the user updates or restores it.
   const drift = Object.values(await getAll('pending', {})).find((p) => !p.live && p.collectionId === id);
   const urls = (drift ? drift.pages : col.pages).map((p) => p.url).filter(Boolean);
+  // Only empty collections stored before they were forbidden: nothing to open.
+  if (!drift && !urls.length) throw new Error('This collection has no pages. Add one first.');
   const win = await api.windows.create(urls.length ? { url: urls, focused: true } : { focused: true });
 
   await withSessions(async (ss) => {
@@ -216,7 +218,7 @@ async function driftStatus() {
   const out = {};
   for (const w of Object.keys(await getAll('sessions', {}))) {
     const state = await windowState(Number(w));
-    if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed };
+    if (state) out[state.col.id] = { windowId: Number(w), changed: state.changed, empty: !state.pages.length };
   }
   return out;
 }
