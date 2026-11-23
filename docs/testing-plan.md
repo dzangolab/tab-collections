@@ -1,6 +1,15 @@
 # Testing plan
 
-Tab Collections has no automated tests yet. Only `npm run build` is checked. This plan lists what to test, at which level, and with which tools. Most of the risk is in the background worker's window and tab tracking, so most of the tests go there.
+This plan lists what to test, at which level, and with which tools. Most of the risk is in the background worker's window and tab tracking, so most of the tests go there.
+
+Levels 1 to 4 are implemented in `test/` and run in CI. Level 5 is the manual checklist. Run them with:
+
+```sh
+npm test             # unit, background and page tests (a few seconds)
+npm run test:e2e     # builds, then runs the end-to-end tests in Chromium
+```
+
+The first `npm run test:e2e` needs Playwright's Chromium: `npx playwright install chromium`.
 
 ## Goals
 
@@ -32,24 +41,29 @@ Pin every new dev dependency to an exact version: `.npmrc` sets `save-exact=true
 
 ### Layout
 ```
+playwright.config.js
 test/
-  fake-browser.js      # in-memory api: storage.local (+ onChanged), windows, tabs, runtime, action
-  unit/*.test.js
-  background/*.test.js
-  pages/*.test.js
-  e2e/*.spec.js        # Playwright
+  fake-browser.js            # in-memory api: storage.local (+ onChanged), windows, tabs, runtime, action
+  unit/common.test.js        # U
+  background/background.test.js  # B
+  pages/harness.js           # loads a page's HTML into happy-dom, with canned background replies
+  pages/{popup,collections,collection,prompt}.test.js  # P, C, E, R
+  e2e/fixtures.js            # Chromium with dist/chromium loaded, a local web site, chrome.* helpers
+  e2e/flows.spec.js          # X
 ```
+
+Each test's name starts with its ID from the tables below.
 
 ### Scripts in `package.json`
 
-- `test`: `node --test test/unit test/background test/pages`
+- `test`: `node --test` over `test/unit`, `test/background` and `test/pages`
 - `test:e2e`: `npm run build && playwright test`
 
 ### The fake browser (`test/fake-browser.js`)
 
-The fake is installed as `globalThis.chrome` before `common.js` is imported: `common.js` reads `api.storage.local` and `api.runtime.getURL` at load time.
+The fake is installed as `globalThis.chrome` when `test/fake-browser.js` is imported, so every test file imports it first: `common.js` reads `api.storage.local` and `api.runtime.getURL` at load time.
 
-It needs:
+It has:
 
 - **`storage.local`:** an in-memory store with `get`, `set` and `onChanged`. `set` fires `onChanged` with `{ oldValue, newValue }`, like the real API.
 - **`windows`:** `create` returns the new window and creates one tab per URL. Also `get` (rejects with `No window with id: N.` once the window is gone), `getCurrent`, `remove` and `update`. Events: `onRemoved`.
@@ -60,23 +74,18 @@ It needs:
   - `onStartup` and `onInstalled` can be fired by the test.
 - **`action.setBadgeText`**.
 
-The fake also needs test controls:
+Test controls:
 
 - **Delays:** a delay before `onRemoved` fires, so a test can reproduce a slow close.
-- **A window that disappears mid-call:** `windows.get` succeeds, then the window is gone before the next call.
-- **Tabs that a window wasn't created with:** for the Vivaldi case.
+- **A window that disappears:** closed with its events (`closeWindowNow`), or without them, as when an event is lost (`vanishWindow`). Tests also replace `windows.create` or `windows.remove` to close a window mid-call.
 - **Tab loading:** start a tab with `status: 'loading'` and `pendingUrl`, then complete it with a redirected URL.
 - **`windows.create({ type: 'popup' })` can be made to throw:** this is Safari's behaviour.
 - **`flush()`:** awaits every queued promise and listener, so tests don't depend on timing.
-- **A fake clock** for `SETTLE_WINDOW_MS` (60 s) and the prompt's 5-minute auto-close (`node:test` `mock.timers`).
+- **Time:** the prompt's 5-minute auto-close uses `node:test` `mock.timers`. For `SETTLE_WINDOW_MS` (60 s), tests move the session's `openedAt` back instead.
 
 ### Making background.js testable
 
-`background.js` registers its listeners when it is imported. Each test file:
-
-1. installs a fresh fake browser;
-2. imports `background.js` with a cache-busting query (`?t=${n}`), so the listeners are registered on that fake;
-3. drives the fake with events.
+`background.js` registers its listeners when it is imported, so the test file imports it once, after the fake. Each test then empties the fake's storage, windows and tabs (`fake.reset()`, which keeps the listeners) and drives it with events. `node:test` runs each file in its own process, so files don't share a fake.
 
 There's no need to export internals. Assertions go through storage (`collections`, `sessions`, `pending`) and through the fake's window and tab lists. This tests behaviour, not implementation.
 
@@ -143,13 +152,15 @@ Every test starts from a known storage state, then fires events. "Prompt opens" 
 | B23 | Close the prompt window without answering (live drift) | The pending entry is deleted |
 | B24 | `windows.create({ type: 'popup' })` throws | The prompt opens as a normal window |
 | B25 | Both window creations throw (live review) | The live pending entry is deleted |
-| B26 | A slow `onRemoved` (delayed by the fake) while 90 tab events are queued | The session is gone by the time `driftStatus` returns |
+| B26 | A slow `onRemoved` (delayed by the fake), a changed 93-tab window | The session is gone by the time `driftStatus` returns; the prompt still opens, once |
+| B26b | **Regression:** `driftStatus` (a page rendering) runs as a changed window closes | One closed drift, one prompt |
 
 ### 2.4 Closing from a toggle (`closeCollection`)
 
 | ID | Scenario | Expected |
 |---|---|---|
 | B27 | Close an open collection | Its window is removed, and so is its session |
+| B27b | Close a changed collection window | The prompt opens |
 | B28 | **Regression (PR #19):** the window is already gone; its session is stale | Resolves without error; the session is pruned |
 | B29 | `windows.remove` fails for another reason, while the window still exists | Rejects with that error |
 
@@ -157,7 +168,7 @@ Every test starts from a known storage state, then fires events. "Prompt opens" 
 
 | ID | Scenario | Expected |
 |---|---|---|
-| B30 | `driftStatus` with one live window, one stale session | Only the live one is listed: `{ windowId, changed, empty }`; the stale session becomes a closed drift without a prompt, if it had changed |
+| B30 | `driftStatus` with one live window, and one changed window that closed without `onRemoved` reaching the worker | Only the live one is listed: `{ windowId, changed, empty }`; the closed one is handled as `onRemoved` would: a closed drift and a prompt |
 | B31 | `windowStatus` for a collection window | `{ changed, name }`; `null` for any other window |
 | B32 | `reviewWindow` on a changed open window | A `live: true` pending entry is stored; the prompt opens |
 | B33 | `reviewWindow` on a window that isn't a collection | Error "This window is not a collection" |
@@ -218,7 +229,7 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | E3 | Add a page | The URL is normalized; invalid URL → toast; title optional |
 | E4 | Edit a title or URL in place | Dirty state, savebar shown; an invalid URL is marked |
 | E5 | Remove every page, then save | Refused with a toast; nothing stored |
-| E6 | Reorder by drag, and with the up/down arrow keys on the handle | Order changes; focus follows the moved page |
+| E6 | Reorder with the up/down arrow keys on the handle (dragging is in the manual checklist) | Order changes; focus follows the moved page |
 | E7 | Save with Ctrl/Cmd+S; Revert | |
 | E8 | `beforeunload` while dirty | The browser asks before leaving |
 | E9 | Another tab saves the same collection | Not dirty → reloads; dirty → the "changed elsewhere" banner shows |
@@ -243,9 +254,9 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 
 ## 4. End-to-end tests (Playwright, Chromium)
 
-These load `dist/chromium` into a persistent Chromium context. They find the extension id through the service worker's URL, and open the pages at `chrome-extension://<id>/…`. Each test starts with fresh storage.
+These load `dist/chromium` into a persistent Chromium context: a fresh profile per test, so each starts with empty storage. They find the extension id through the service worker's URL, and open the pages at `chrome-extension://<id>/…`. The collections' pages come from a local web server started for each test, so nothing goes to the network.
 
-The tests reach the background worker through `context.serviceWorkers()[0].evaluate(...)`. They use it to seed storage and to call `chrome.windows.*` for actions Playwright can't do, such as closing a whole window.
+The tests reach the background worker through `context.serviceWorkers()[0].evaluate(...)`. They use it to seed storage and to call `chrome.windows.*` for actions Playwright can't do, such as closing a whole window. Before closing a changed window, a test waits until the worker has recorded the change (`ext.tracked`), never for a fixed time.
 
 | ID | Flow |
 |---|---|
@@ -257,9 +268,8 @@ The tests reach the background worker through `context.serviceWorkers()[0].evalu
 | X6 | Close the prompt without answering → the drift strip shows on the Collections page; Update, Restore and Details work |
 | X7 | **Regression:** seed an 89-page closed drift for a 3-page collection; open it → 3 tabs |
 | X8 | **Regression:** seed a stale session for a closed window id; Collections page → shown closed; toggling it doesn't error |
-| X9 | Open the popup (`popup.html` in a tab, with the target window's id) → save the window; the collection exists and is tracked |
+| X9 | Open the popup (`popup.html` as a tab of the window to save) → save the window; the collection exists and is tracked |
 | X10 | Import an export file (round trip) → the same collections; a file containing an empty collection → it is skipped and counted |
-| X11 | Reload the extension with a collection window open, then reopen → state recovers (sessions pruned, nothing duplicated) |
 | X12 | Performance guard: open a 50-page collection; close it → one prompt, no long hang (`onRemoved` handled within 2 s) |
 
 ## 5. Manual checklist (each release)
@@ -273,6 +283,8 @@ Run it in **Vivaldi**, **Chrome**, **Firefox 140+** (temporary add-on) and **Saf
 - [ ] Toggles in the popup and on the Collections page match reality after closing a window from the OS (the red button or Cmd+W).
 - [ ] Export downloads a file, and Import reads it back.
 - [ ] Favicons show, with the globe fallback for a site without one.
+- [ ] Reorder pages by dragging the handle on the Collection page.
+- [ ] **X11:** reload the extension (on the extensions page) with a collection window open. The toggle still shows it open, closing it from the toggle works, and nothing is duplicated. Playwright can't automate this: it gets no working service worker back after a reload.
 - [ ] Dark mode and light mode; keyboard only (Tab, Enter, the arrows on the drag handle); a screen reader reads the toggle labels and the drift button.
 
 ### Vivaldi
@@ -301,21 +313,20 @@ Each fixed bug gets a test at the lowest level that can reproduce it:
 | An empty drift recorded for a window closed before its tabs were read | PR #19 | B5, B19 |
 | An empty "New collection" stored by the New button | PR #20 | C5, E1, E5, U10 |
 | Empty collections created by import or from Vivaldi workspaces | PR #20 | U8, C7, C8 |
+| No prompt when a page asked for drift status, or a toggle closed the window, as a changed window closed | PR #21 | B26, B26b, B27b, B30, X4–X6, X12 |
+| With unsaved edits, Export named the file after the unsaved name | PR #21 | E12 |
 
 ## CI
 
-Add a GitHub Actions workflow on every push and pull request:
+`.github/workflows/test.yml` runs on every pull request and on pushes to `main`:
 
-1. `npm ci`
+1. Node from `mise.toml` (`jdx/mise-action`), then `npm ci`
 2. `npm run build` (all three targets, to catch manifest or bundling errors)
 3. `npm test`
-4. `npx playwright install --with-deps chromium && npm run test:e2e`, using Playwright's headless Chromium, which runs extensions
+4. `npx playwright install --with-deps chromium`, then `npx playwright test`, with Playwright's headless Chromium, which runs extensions. On failure, `test-results/` is uploaded.
 
-## Order of work
+## Not automated
 
-1. Fake browser + unit tests (U1–U15).
-2. Background integration tests, regressions first (B2, B5, B28), then the rest.
-3. CI workflow.
-4. Playwright end-to-end tests (X1–X12).
-5. Page tests (P, C, E, R).
-6. Manual checklist in each release's PR template.
+- **Firefox and Safari:** the manual checklist. Playwright can't load extensions in either.
+- **Dragging, favicons, styles, dark mode, screen readers:** the manual checklist.
+- **The cause of the Vivaldi tab explosion:** the manual Vivaldi check above.

@@ -1,0 +1,36 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Node from mise.toml.
+      - uses: jdx/mise-action@v5.3.0
+
+      - run: npm ci
+
+      # All three targets, to catch manifest or bundling errors.
+      - run: npm run build
+
+      - name: Unit, background and page tests
+        run: npm test
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npx playwright test
+
+      - if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7

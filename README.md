@@ -35,7 +35,13 @@ A collection always has at least one page: you can't save one without pages.
 
 ## Contributing
 
-See [docs/testing-plan.md](docs/testing-plan.md) for what to test and how.
+### Running the tests
+```sh
+npm test                          # unit, background and page tests, against a fake browser API
+npx playwright install chromium   # once, for the end-to-end tests
+npm run test:e2e                  # builds, then runs the extension in Chromium
+```
+[docs/testing-plan.md](docs/testing-plan.md) lists every test, and the manual checklist for Vivaldi, Firefox and Safari.
 
 ### Installing locally from code
 
