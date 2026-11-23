@@ -34,7 +34,7 @@
   "storeListing": {
     "category": "Productivity / Workflow & Planning",
     "description": "Tab Collections turns groups of tabs into named collections you can open again in one click.\n\nSave the tabs of a window as a collection, then open the collection whenever you need it: it opens as its own window, with one tab per page. Close the window when you're done, and open it again tomorrow exactly as you saved it.\n\nCOLLECTIONS\n• Save a whole window, or just the tabs you've selected, from the toolbar.\n• Open or close a collection's window with one switch, from the toolbar or the Collections page.\n• Edit a collection: rename it, describe it, add, remove and reorder its pages.\n• Filter your collections, and see at a glance which ones are open.\n\nSTAYS IN STEP WITH YOUR TABS\n• If you change the tabs of a collection's window, Tab Collections asks when you close it: update the collection, keep it as saved, or save the tabs as a new collection.\n• Undecided changes stay listed, so you can update or restore the collection later.\n• Choose which answer is the default.\n\nSYNC THROUGH STORAGE YOU OWN\n• Share your collections between browsers and devices through a private repository on GitHub, GitLab, Gitea, Forgejo or Codeberg, or a file on a WebDAV server such as Nextcloud.\n• Optional end-to-end encryption with a passphrase: the server only stores ciphertext.\n• Automatic or manual sync. Changes made on different devices are merged; if two devices change the same thing, you choose which version to keep.\n\nPRIVATE BY DESIGN\n• Your collections are stored in your browser. Nothing is sent to us, or to anyone else.\n• Sync only ever talks to the server you set up, and the extension asks for access to that one server only.\n• Your access token stays on your device.\n\nBACKUP AND SHARING\n• Export your collections to a file, and import them into any browser.\n\nWorks in Chrome, Edge, Brave, Vivaldi, Opera and other Chromium browsers. In Vivaldi, collections can also be created from your workspaces, in versions that share them with extensions.",
-    "homepageUrl": null,
+    "homepageUrl": "https://github.com/dzangolab/tab-collections",
     "icon": "icon-128.png",
     "language": "English",
     "marqueePromoTile": "promo/marquee-1400x560.png",
@@ -48,6 +48,6 @@
     ],
     "smallPromoTile": "promo/small-440x280.png",
     "summary": "Group web sites into collections and open each collection as its own window.",
-    "supportUrl": null
+    "supportUrl": "https://github.com/dzangolab/tab-collections/issues"
   }
 }
