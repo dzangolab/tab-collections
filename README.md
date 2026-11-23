@@ -42,6 +42,7 @@ Sync shares your collections between browsers and devices through storage you ow
 - **Conflicts:** when two devices change the same thing (both rename a collection, or edit the same page's title), each keeps its own version, and the collection shows a strip: **Keep mine**, **Keep theirs**, or **Keep both** (yours becomes a copy).
 - **What syncs:** collections only. Open windows, undecided window changes and settings stay on each device.
 - **History:** on a git host, every sync is a commit, so old versions can be restored from the repository. On WebDAV, only if the server keeps file versions (Nextcloud does).
+- **Edit settings** shows the setup form filled in with this device's settings, including the token and passphrase (the eye button shows them). Changing the token, username or mode keeps everything else as it is. Changing the passphrase, or turning encryption on or off, rewrites the sync file accordingly; then enter the new passphrase on your other devices too. Changing where it syncs works like connecting anew: this device's collections are combined with what's there.
 - **Disconnect** stops syncing on that device; its collections stay, and the sync file stays on the server.
 
 ## Vivaldi workspaces

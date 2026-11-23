@@ -231,3 +231,54 @@ describe('SE13–SE15 robustness', () => {
     assert.ok(fake.store.collections.m);
   });
 });
+
+describe('SE16–SE20 Edit settings', () => {
+  const update = (over = {}) => send({ type: 'syncUpdate', config: { ...fake.store.syncConfig, ...over } });
+
+  test('SE16 a new token or mode, same place: the sync state stays, open conflicts too', async () => {
+    await setup();
+    await elsewhere((s) => { s.collections.m.name = 'Theirs'; });
+    fake.store.collections = { m: { ...fake.store.collections.m, name: 'Ours' } };
+    await send({ type: 'syncNow' });
+    await update({ token: 'new-token', mode: 'manual' });
+    assert.deepEqual([fake.store.syncConfig.token, fake.store.syncConfig.mode], ['new-token', 'manual']);
+    assert.equal(remote.requests.at(-1).headers.Authorization, 'Bearer new-token');
+    assert.equal((await send({ type: 'syncStatus' })).conflicts.m.theirs.name, 'Theirs', 'not merged away as a fresh setup');
+    assert.equal(fake.store.collections.m.name, 'Ours');
+  });
+
+  test('SE17 a new passphrase re-encrypts the file: the new one opens it, the old one no longer does', async () => {
+    await setup({ passphrase: 'old secret' });
+    await update({ passphrase: 'new secret' });
+    assert.equal((await remoteSnap('new secret')).collections.m.name, 'Mine');
+    await assert.rejects(remoteSnap('old secret'), /Wrong passphrase/);
+    assert.equal(fake.store.syncState.reencryptFrom, undefined, 'done once');
+  });
+
+  test('SE18 encryption turned on, then off: the file follows', async () => {
+    await setup();
+    await update({ passphrase: 'secret' });
+    assert.ok(!remote.text.includes('Mine'));
+    assert.equal((await remoteSnap('secret')).collections.m.name, 'Mine');
+    await update({ passphrase: '' });
+    assert.equal((await remoteSnap()).collections.m.name, 'Mine');
+  });
+
+  test('SE19 settings that don’t work: refused, nothing changed', async () => {
+    await setup({ passphrase: 'right' });
+    const before = structuredClone(fake.store.syncConfig);
+    remote.repoExists = false;
+    await assert.rejects(update({ token: 'other' }), /not found/);
+    remote.repoExists = true;
+    await assert.rejects(update({ repo: 'no-slash' }), /owner\/name/);
+    assert.deepEqual(fake.store.syncConfig, before);
+  });
+
+  test('SE20 a new location: like a new setup, this device’s collections go to the new file', async () => {
+    await setup();
+    await update({ path: 'elsewhere.json' });
+    assert.equal(fake.store.syncConfig.path, 'elsewhere.json');
+    assert.ok(remote.requests.at(-1).url.includes('elsewhere.json'));
+    assert.equal(fake.store.syncState.lastError, null);
+  });
+});

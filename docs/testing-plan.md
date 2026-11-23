@@ -270,6 +270,11 @@ Every test starts from a known storage state, then fires events. "Prompt opens" 
 | SE13 | Another device writes between our read and write | Re-read, merged; both changes kept |
 | SE14 | Offline | Error recorded; local changes kept; the next sync goes through and clears the error |
 | SE15 | Encrypted; Disconnect | The server sees only ciphertext; Disconnect clears the config and alarm, keeps the collections |
+| SE16 | Edit settings: a new token and mode, same place | Saved; requests use the new token; the sync state stays, an open conflict too |
+| SE17 | Edit settings: a new passphrase | The file is re-encrypted: the new passphrase opens it, the old one doesn't; done once |
+| SE18 | Edit settings: encryption turned on, then off | The file is encrypted, then plain again |
+| SE19 | Edit settings that don't work (missing repository, bad repository) | Refused; the settings are unchanged |
+| SE20 | Edit settings: a new location | Saved; the new file is used, like a new setup |
 
 ## 3. Page tests (DOM)
 
@@ -357,6 +362,7 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | Y8 | A conflict | A strip on the card; Keep both sends `syncResolve` |
 | Y9 | Collection page, conflict with a deletion | The strip, with Keep mine and Delete |
 | Y10 | Popup | A Sync row only when set up, with the status; Sync sends `syncNow` |
+| Y11 | Edit settings | The form filled in with the current settings (token and passphrase hidden behind the eye), Save and Cancel; a re-render while editing keeps what was typed; Save sends `syncUpdate` and shows the connected panel again; Cancel sends nothing |
 
 ## 4. End-to-end tests (Playwright, Chromium)
 
@@ -402,6 +408,7 @@ Run it in **Vivaldi**, **Chrome**, **Firefox 140+** (temporary add-on) and **Saf
 - [ ] Encryption on: the repository file is ciphertext; a second browser with a wrong passphrase is refused at setup.
 - [ ] Manual mode: the popup's status says "Local changes not synced yet"; after a change elsewhere, the dot shows on the toolbar icon within 5 minutes.
 - [ ] WebDAV with Nextcloud and an app password, and GitLab with a project access token.
+- [ ] Edit settings: change the token, then the passphrase. After the passphrase change, the second browser's sync fails with "Wrong passphrase" until its passphrase is updated through Edit settings too.
 - [ ] Offline (network off): Sync fails with a message, and the next sync after reconnecting goes through.
 
 ### Vivaldi

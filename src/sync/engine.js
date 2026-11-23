@@ -8,6 +8,9 @@
 //     version:   the sync file's version then (sha, commit id or ETag)
 //     synced:    what the last sync left in local storage; local data that differs has unsynced changes
 //     conflicts: { [id]: { theirs } } collections changed on both sides, waiting for the user
+//     reencryptFrom: set after the passphrase changed (or encryption was turned on or off): the
+//                passphrase the sync file is still under ('' for a plain file). The next sync reads
+//                the file with it and writes it under the new one.
 //
 // Automatic mode pushes local changes a few seconds after the edit, and merges remote changes at
 // every check. Manual mode leaves local changes on the device until Sync is clicked, and only
@@ -63,7 +66,17 @@ async function syncOnce({ checkOnly = false } = {}) {
       return getState();
     }
 
-    const { snapshot: remote, salt } = await readSyncFile(text, cfg.passphrase);
+    const reencrypt = state.reencryptFrom != null && state.reencryptFrom !== cfg.passphrase;
+    let file;
+    try {
+      file = await readSyncFile(text, cfg.passphrase);
+    } catch (e) {
+      if (!reencrypt) throw e;
+      // Still under the old passphrase: read it with that one, and write it under the new one
+      // (with a new salt).
+      file = { ...(await readSyncFile(text, state.reencryptFrom)), salt: null };
+    }
+    const { snapshot: remote, salt } = file;
     const local = await readLocal();
     const m = merge(state.base || emptySnapshot(), local, remote, { pinned: Object.keys(state.conflicts || {}) });
 
@@ -74,7 +87,7 @@ async function syncOnce({ checkOnly = false } = {}) {
 
     let newVersion = version;
     const empty = !Object.keys(m.shared.collections).length && !Object.keys(m.shared.tombstones).length;
-    if (text == null ? !empty : !sameSnapshot(m.shared, remote)) {
+    if (text == null ? !empty : (reencrypt || !sameSnapshot(m.shared, remote))) {
       try {
         newVersion = await backend.write(await writeSyncFile(m.shared, cfg.passphrase, salt), version);
       } catch (e) {
@@ -177,10 +190,47 @@ export async function setupSync(input) {
   await backend.check();
   const { text } = await backend.read();
   await readSyncFile(text, cfg.passphrase);
-  await STORE.set({ syncConfig: cfg, syncState: { base: emptySnapshot(), version: null, synced: emptySnapshot(), conflicts: {} } });
+  await STORE.set({ syncConfig: cfg, syncState: freshState() });
   await ensureAlarm();
   return syncNow();
 }
+
+const LOCATION = ['backend', 'server', 'repo', 'branch', 'path', 'url'];
+
+// Edit settings. Checks the new settings against the sync file before saving anything.
+// - Same location (only the token, username, mode or passphrase changed): the sync state stays, so
+//   the next sync merges as usual and open conflicts stay open.
+// - A new passphrase (or encryption turned on or off) for a file the old one still opens: the
+//   file is rewritten under the new one. Other devices then need the new passphrase.
+// - A new location: like a new setup; the collections on both sides are united.
+export async function updateSyncConfig(input) {
+  const old = await getSyncConfig();
+  if (!old) return setupSync(input);
+  const cfg = normalizeConfig(input);
+  const samePlace = LOCATION.every((f) => (old[f] || '') === (cfg[f] || ''));
+  const backend = makeBackend(cfg);
+  await backend.check();
+  const { text } = await backend.read();
+  let reencryptFrom = null;
+  try {
+    await readSyncFile(text, cfg.passphrase);
+  } catch (e) {
+    if (!samePlace || cfg.passphrase === old.passphrase) throw e;
+    try {
+      await readSyncFile(text, old.passphrase);
+    } catch {
+      throw e; // neither opens it: report the problem with the new settings
+    }
+    reencryptFrom = old.passphrase;
+  }
+  const state = samePlace ? { ...((await getState()) || {}), lastError: null } : freshState();
+  if (reencryptFrom != null) state.reencryptFrom = reencryptFrom;
+  await STORE.set({ syncConfig: cfg, syncState: state });
+  await ensureAlarm();
+  return syncNow();
+}
+
+const freshState = () => ({ base: emptySnapshot(), version: null, synced: emptySnapshot(), conflicts: {} });
 
 export async function setSyncMode(mode) {
   const cfg = await getSyncConfig();
