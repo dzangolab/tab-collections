@@ -1,6 +1,6 @@
 # 1. Sync collections through storage the user owns
 
-- **Status:** Proposed
+- **Status:** Accepted (implemented in PR #28)
 - **Date:** 2026-11-23
 
 ## Context
@@ -108,7 +108,7 @@ Local changes are never erased unless the user chooses to. An edit that hasn't s
 ### Encryption
 Optional, chosen at setup.
 
-- The file is encrypted on the device with a passphrase (WebCrypto: a key derived with PBKDF2 or Argon2, then AES-GCM), so the storage server only holds ciphertext.
+- The file is encrypted on the device with a passphrase (WebCrypto: a key derived with PBKDF2, SHA-256 and 600,000 iterations, then AES-GCM), so the storage server only holds ciphertext. WebCrypto has no Argon2.
 - Every device that uses the same sync file needs the same passphrase.
 - Without encryption, the file is plain JSON, readable and comparable in the repo.
 
@@ -136,6 +136,16 @@ Optional, chosen at setup.
 - **Commits:** each sync on a git host is a commit. Automatic mode batches edits made within a few seconds, so a busy session doesn't flood the repo.
 - **Extension:** a new optional host permission, and `alarms` for the periodic check.
 - **Later:** a hosted service of ours fits in as another backend, with the same encryption and merge.
+
+## Implementation notes
+
+Choices made while building it, where this record left room:
+
+- **Pages are matched by URL** in the merge. Editing a page's URL counts as removing the old page and adding the new one, so the same URL edited differently on two devices keeps both new pages rather than raising a conflict.
+- **An edit beats a deletion:** a collection deleted on one device and edited on another is kept, so no edit is lost.
+- **Page order:** the device that reordered its pages wins (this device if both did); pages added on the other device go after the page they followed there.
+- **An unresolved conflict stays out of the sync file:** it keeps the other device's version there until the user chooses, so two devices never overwrite each other back and forth.
+- **Badge:** the dot also shows while a conflict waits for the user.
 
 ## Open questions
 

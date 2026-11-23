@@ -43,11 +43,17 @@ Pin every new dev dependency to an exact version: `.npmrc` sets `save-exact=true
 ```
 playwright.config.js
 test/
-  fake-browser.js            # in-memory api: storage.local (+ onChanged), windows, tabs, runtime, action
+  fake-browser.js            # in-memory api: storage.local (+ onChanged), windows, tabs, runtime, action, alarms, permissions
+  fake-remote.js             # in-memory GitHub, GitLab, Gitea and WebDAV servers answering fetch
   unit/common.test.js        # U
+  unit/backends.test.js      # S
+  unit/merge.test.js         # M
+  unit/sync-file.test.js     # F
   background/background.test.js  # B
+  background/sync.test.js    # SE
   pages/harness.js           # loads a page's HTML into happy-dom, with canned background replies
   pages/{popup,collections,collection,prompt}.test.js  # P, C, E, R
+  pages/sync.test.js         # Y
   e2e/fixtures.js            # Chromium with dist/chromium loaded, a local web site, chrome.* helpers
   e2e/flows.spec.js          # X
 ```
@@ -109,6 +115,62 @@ There's no need to export internals. Assertions go through storage (`collections
 | U14 | `vivaldiData`, `workspaceKey`, `workspaceCreated` | Parses `vivExtData` given as an object or as a JSON string; bad JSON → `null`; float workspace ids are rounded; missing, empty or NaN id → `none`; only 13-digit timestamps give a date |
 | U15 | `buildExport` → `parseImport` | A round trip keeps `id`, `name`, `description`, `pages` and `createdAt` |
 | U16 | `suspiciousGrowth` | True for more than 10 added tabs and more than double the pages; false for smaller, proportionate or shrinking changes |
+
+## 1b. Unit tests: sync
+
+### Merge (`src/sync/merge.js`)
+
+| ID | Case | Expected |
+|---|---|---|
+| M1 | `sameCollection` | Ignores timestamps; sees name, description, page and title changes |
+| M2 | Pages added on each side | Both kept, each after the page it followed |
+| M3 | A page removed on either side | Removed |
+| M4 | A title changed on one side | That side's title |
+| M5 | The same title changed differently on both sides | A conflict |
+| M6 | A reorder on one side | Its order wins, with the other side's additions after the page they followed |
+| M7 | A URL listed twice | Two pages |
+| M8 | Renamed on one side, a page added on the other | Both changes kept |
+| M9 | Both renamed differently | A conflict |
+| M10 | The same rename on both sides | No conflict; the later `updatedAt` |
+| M11 | Every page removed between the two sides | A conflict, never an empty collection |
+| M11b | The same id added on both sides (no base) | Different names conflict; pages are united |
+| M12 | First sync, empty sync file | This device's collections |
+| M13 | First sync, collections on both sides | United |
+| M14 | Changed on one side only | That side's version |
+| M15 | Deleted on one side, unchanged on the other | Deleted on both, with the tombstone |
+| M16 | Deleted on one side, edited on the other | The edit wins; no tombstone |
+| M17 | A tombstone against a stale copy | The copy doesn't come back |
+| M18 | A conflict | The sync file keeps theirs, this device keeps mine, the conflict is listed |
+| M19 | A pinned (unresolved) conflict | Unchanged on both sides; the latest theirs |
+| M20 | Tombstones on both sides | Kept, with the latest date |
+
+### Sync file (`src/sync/file.js`)
+
+| ID | Case | Expected |
+|---|---|---|
+| F1 | Plain round trip | Same snapshot, tombstones included; no `exportedAt`, so the same data gives the same file |
+| F2 | Import a plain sync file by hand | `parseImport` reads its collections |
+| F3 | No file yet | An empty snapshot |
+| F4 | Encrypted round trip | Same snapshot; the file holds no plain text; a 16-byte salt |
+| F5 | Wrong or missing passphrase | Refused with a clear message |
+| F6 | Encryption on, plain file | Refused |
+| F7 | Not a Tab Collections file, not JSON | Refused |
+| F8 | UTF-8 base64 helpers | Round trip; line breaks ignored |
+
+### Backends (`src/sync/backends.js`, against `test/fake-remote.js`)
+
+S2–S7 run for each of GitHub, GitLab, Gitea and WebDAV.
+
+| ID | Case | Expected |
+|---|---|---|
+| S1 | API addresses and permissions | api.github.com for github.com; `/api/v3`, `/api/v4`, `/api/v1` otherwise; one origin asked for |
+| S2 | No file yet, then a first write | `text: null`; the write creates it |
+| S3 | Read, then write based on it | The new text; `write` returns the version a read then gives |
+| S4 | A write based on an old version | `ConflictError`; the file is unchanged |
+| S5 | Creating a file another device just created | `ConflictError` |
+| S6 | Refused credentials | `AuthError` |
+| S7 | Missing repository or folder; server unreachable | Clear errors |
+| S8 | Credentials | The right `Authorization` header for each backend |
 
 ## 2. Background integration tests
 
@@ -187,6 +249,28 @@ Every test starts from a known storage state, then fires events. "Prompt opens" 
 | B40 | `onStartup`, a changed session, then reopen that collection | Opens the saved pages only (the B2 path, through the startup route) |
 | B41 | `onInstalled` with stale sessions and a stale prompt | Stale sessions pruned; live pending entries without a prompt dropped; closed ones kept with `promptWindowId: null`; badge text cleared |
 
+### 2.7 Sync engine (`src/sync/engine.js`, `test/background/sync.test.js`)
+
+"Another device" writes the fake server's file directly.
+
+| ID | Scenario | Expected |
+|---|---|---|
+| SE1 | Setup with an empty sync file | It gets this device's collections; the config is saved; the 5-minute alarm exists; nothing unsynced |
+| SE2 | Setup with an existing sync file | The collections on both sides are united, locally and in the file |
+| SE3 | Setup with a wrong passphrase, a bad repository, or `http://` | Refused; nothing saved |
+| SE4 | Automatic: two edits within a few seconds | One write, a few seconds after the last edit, with both edits |
+| SE5 | The sync's own local writes | Don't start another sync |
+| SE6 | Automatic: the alarm, after another device's change | Merged in locally |
+| SE7 | Deletions, both ways | Tombstone in the file; a remote tombstone deletes locally |
+| SE8 | Manual: a local edit | Not pushed; status `unsynced`; Sync pushes it |
+| SE9 | Manual: the alarm, after another device's change | Only announced (`remoteChanged`, badge dot); Sync pulls it and clears the dot |
+| SE10 | Both renamed | Local keeps mine, the file keeps theirs; conflict listed; badge dot; an open conflict isn't pushed |
+| SE11 | Keep mine, Keep theirs | Mine is pushed; theirs replaces mine locally |
+| SE12 | Keep both | Theirs kept; mine saved as "(copy)", which syncs |
+| SE13 | Another device writes between our read and write | Re-read, merged; both changes kept |
+| SE14 | Offline | Error recorded; local changes kept; the next sync goes through and clears the error |
+| SE15 | Encrypted; Disconnect | The server sees only ciphertext; Disconnect clears the config and alarm, keeps the collections |
+
 ## 3. Page tests (DOM)
 
 Each test loads the page's HTML into happy-dom, installs the fake browser, and replaces `send()` with a stub that records messages and returns canned results.
@@ -257,6 +341,21 @@ Each test loads the page's HTML into happy-dom, installs the fake browser, and r
 | R10 | Suspicious growth | Warns; Restore stays the default even with `closeDefault: update`; an open window's Update isn't focused; no warning for ordinary changes |
 | R11 | Vivaldi note | Shown when tabs carry `vivExtData`; not otherwise |
 
+### Sync screens (`sync-settings.js`, sync parts of the other pages)
+
+| ID | Scenario | Expected |
+|---|---|---|
+| Y1 | Not set up | The setup form, GitHub's token help; no Sync button in the top bar |
+| Y2 | WebDAV chosen | File address and username instead of the repository fields |
+| Y3 | Valid settings | Asks for the one server's permission, then sends `syncSetup` with defaults filled in |
+| Y4 | Bad repository, different passphrases, permission refused | A message each; no `syncSetup` |
+| Y5 | Set up | Sync button and "Synced 2 min ago" in the top bar; Sync sends `syncNow` |
+| Y6 | The panel | Where it syncs, Encrypted tag; the mode select sends `syncMode`; Disconnect asks, then sends `syncDisconnect` |
+| Y7 | A failed sync; changes from another device | A notice strip with Sync |
+| Y8 | A conflict | A strip on the card; Keep both sends `syncResolve` |
+| Y9 | Collection page, conflict with a deletion | The strip, with Keep mine and Delete |
+| Y10 | Popup | A Sync row only when set up, with the status; Sync sends `syncNow` |
+
 ## 4. End-to-end tests (Playwright, Chromium)
 
 These load `dist/chromium` into a persistent Chromium context: a fresh profile per test, so each starts with empty storage. They find the extension id through the service worker's URL, and open the pages at `chrome-extension://<id>/…`. The collections' pages come from a local web server started for each test, so nothing goes to the network.
@@ -276,6 +375,7 @@ The tests reach the background worker through `context.serviceWorkers()[0].evalu
 | X9 | Open the popup (`popup.html` as a tab of the window to save) → save the window; the collection exists and is tracked |
 | X10 | Import an export file (round trip) → the same collections; a file containing an empty collection → it is skipped and counted |
 | X12 | Performance guard: open a 50-page collection; close it → one prompt, no long hang (`onRemoved` handled within 2 s) |
+| X13 | The Sync panel loads in Chromium (its modules resolve), GitHub preselected; a bad repository is refused |
 
 ## 5. Manual checklist (each release)
 
@@ -291,6 +391,16 @@ Run it in **Vivaldi**, **Chrome**, **Firefox 140+** (temporary add-on) and **Saf
 - [ ] Reorder pages by dragging the handle on the Collection page.
 - [ ] **X11:** reload the extension (on the extensions page) with a collection window open. The toggle still shows it open, closing it from the toggle works, and nothing is duplicated. Playwright can't automate this: it gets no working service worker back after a reload.
 - [ ] Dark mode and light mode; keyboard only (Tab, Enter, the arrows on the drag handle); a screen reader reads the toggle labels and the drift button.
+
+### Sync (every browser)
+- [ ] Set up sync with a real private GitHub repository and a fine-grained token; the browser asks for access to api.github.com only.
+- [ ] On a second browser, set up the same repository: the collections of both are united.
+- [ ] Rename on one, add a page on the other, sync both: both changes arrive. Both rename the same collection: the conflict strip, then each of Keep mine, Keep theirs, Keep both.
+- [ ] Delete a collection on one: it disappears on the other after its next sync.
+- [ ] Encryption on: the repository file is ciphertext; a second browser with a wrong passphrase is refused at setup.
+- [ ] Manual mode: the popup's status says "Local changes not synced yet"; after a change elsewhere, the dot shows on the toolbar icon within 5 minutes.
+- [ ] WebDAV with Nextcloud and an app password, and GitLab with a project access token.
+- [ ] Offline (network off): Sync fails with a message, and the next sync after reconnecting goes through.
 
 ### Vivaldi
 - [ ] *From Vivaldi workspaces…* lists the workspaces; created collections skip web panels and empty workspaces.

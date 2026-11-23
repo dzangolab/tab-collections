@@ -1,5 +1,5 @@
 // The sync engine (src/sync/engine.js) through the background's messages, against a fake server
-// (E1–E15 in docs/testing-plan.md). "Another device" writes the sync file directly.
+// (SE1–SE15 in docs/testing-plan.md). "Another device" writes the sync file directly.
 import { fake } from '../fake-browser.js';
 import { afterEach, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,8 +38,8 @@ async function elsewhere(change, pass = '') {
   remote.put(await writeSyncFile(snap, pass));
 }
 
-describe('E1–E3 setup', () => {
-  test('E1 an empty sync file gets this device’s collections; a periodic check is scheduled', async () => {
+describe('SE1–SE3 setup', () => {
+  test('SE1 an empty sync file gets this device’s collections; a periodic check is scheduled', async () => {
     await setup();
     assert.deepEqual(Object.keys((await remoteSnap()).collections), ['m']);
     assert.equal(fake.store.syncConfig.token, 't0k');
@@ -50,14 +50,14 @@ describe('E1–E3 setup', () => {
     assert.ok(status.lastSyncAt);
   });
 
-  test('E2 an existing sync file: the collections on both sides are united', async () => {
+  test('SE2 an existing sync file: the collections on both sides are united', async () => {
     remote.put(await writeSyncFile({ collections: { t: col('t', 'Theirs', ['https://t.example/']) }, tombstones: {} }, ''));
     await setup();
     assert.deepEqual(Object.keys(fake.store.collections).sort(), ['m', 't']);
     assert.deepEqual(Object.keys((await remoteSnap()).collections).sort(), ['m', 't']);
   });
 
-  test('E3 bad settings or a wrong passphrase: refused, nothing saved', async () => {
+  test('SE3 bad settings or a wrong passphrase: refused, nothing saved', async () => {
     remote.put(await writeSyncFile({ collections: {}, tombstones: {} }, 'right'));
     await assert.rejects(setup({ passphrase: 'wrong' }), /Wrong passphrase/);
     await assert.rejects(setup({ repo: 'no-slash' }), /owner\/name/);
@@ -66,8 +66,8 @@ describe('E1–E3 setup', () => {
   });
 });
 
-describe('E4–E7 automatic mode', () => {
-  test('E4 a local edit is pushed a few seconds later, in one write for several edits', async () => {
+describe('SE4–SE7 automatic mode', () => {
+  test('SE4 a local edit is pushed a few seconds later, in one write for several edits', async () => {
     await setup();
     const before = puts();
     mock.timers.enable({ apis: ['setTimeout'] });
@@ -83,7 +83,7 @@ describe('E4–E7 automatic mode', () => {
     assert.deepEqual([m.name, m.description], ['Renamed', 'and described']);
   });
 
-  test('E5 the sync’s own writes don’t start another sync', async () => {
+  test('SE5 the sync’s own writes don’t start another sync', async () => {
     remote.put(await writeSyncFile({ collections: { t: col('t', 'Theirs', ['https://t.example/']) }, tombstones: {} }, ''));
     await setup();
     const requests = remote.requests.length;
@@ -93,7 +93,7 @@ describe('E4–E7 automatic mode', () => {
     assert.equal(remote.requests.length, requests);
   });
 
-  test('E6 the periodic check merges remote changes in', async () => {
+  test('SE6 the periodic check merges remote changes in', async () => {
     await setup();
     await elsewhere((s) => { s.collections.m.name = 'Renamed elsewhere'; });
     fake.fireAlarm(CHECK_ALARM);
@@ -101,7 +101,7 @@ describe('E4–E7 automatic mode', () => {
     assert.equal(fake.store.collections.m.name, 'Renamed elsewhere');
   });
 
-  test('E7 deletions travel both ways, as tombstones', async () => {
+  test('SE7 deletions travel both ways, as tombstones', async () => {
     fake.store.collections.x = col('x', 'X', ['https://x.example/']);
     await setup();
     await removeCollection('x');
@@ -115,8 +115,8 @@ describe('E4–E7 automatic mode', () => {
   });
 });
 
-describe('E8–E9 manual mode', () => {
-  test('E8 local changes wait for Sync; the status says so', async () => {
+describe('SE8–SE9 manual mode', () => {
+  test('SE8 local changes wait for Sync; the status says so', async () => {
     await setup({ mode: 'manual' });
     const before = puts();
     mock.timers.enable({ apis: ['setTimeout'] });
@@ -132,7 +132,7 @@ describe('E8–E9 manual mode', () => {
     assert.equal((await send({ type: 'syncStatus' })).unsynced, false);
   });
 
-  test('E9 remote changes are only announced (with a badge dot) until Sync', async () => {
+  test('SE9 remote changes are only announced (with a badge dot) until Sync', async () => {
     await setup({ mode: 'manual' });
     await elsewhere((s) => { s.collections.m.name = 'Renamed elsewhere'; });
     fake.fireAlarm(CHECK_ALARM);
@@ -146,7 +146,7 @@ describe('E8–E9 manual mode', () => {
   });
 });
 
-describe('E10–E12 conflicts', () => {
+describe('SE10–SE12 conflicts', () => {
   async function conflicted() {
     await setup();
     await elsewhere((s) => { s.collections.m.name = 'Theirs'; });
@@ -154,7 +154,7 @@ describe('E10–E12 conflicts', () => {
     await send({ type: 'syncNow' });
   }
 
-  test('E10 both renamed: this device keeps its version, the sync file keeps theirs, the user is asked', async () => {
+  test('SE10 both renamed: this device keeps its version, the sync file keeps theirs, the user is asked', async () => {
     await conflicted();
     assert.equal(fake.store.collections.m.name, 'Ours');
     assert.equal((await remoteSnap()).collections.m.name, 'Theirs');
@@ -165,7 +165,7 @@ describe('E10–E12 conflicts', () => {
     assert.equal((await remoteSnap()).collections.m.name, 'Theirs', 'an open conflict isn’t pushed');
   });
 
-  test('E11 Keep mine pushes this device’s version; Keep theirs takes the other', async () => {
+  test('SE11 Keep mine pushes this device’s version; Keep theirs takes the other', async () => {
     await conflicted();
     await send({ type: 'syncResolve', id: 'm', choice: 'mine' });
     await send({ type: 'syncNow' });
@@ -179,7 +179,7 @@ describe('E10–E12 conflicts', () => {
     assert.equal(fake.store.collections.m.name, 'Theirs 2');
   });
 
-  test('E12 Keep both keeps theirs and saves mine as a copy, which syncs too', async () => {
+  test('SE12 Keep both keeps theirs and saves mine as a copy, which syncs too', async () => {
     await conflicted();
     await send({ type: 'syncResolve', id: 'm', choice: 'both' });
     await send({ type: 'syncNow' });
@@ -188,8 +188,8 @@ describe('E10–E12 conflicts', () => {
   });
 });
 
-describe('E13–E15 robustness', () => {
-  test('E13 another device writes between our read and write: we re-read, merge, and keep both changes', async () => {
+describe('SE13–SE15 robustness', () => {
+  test('SE13 another device writes between our read and write: we re-read, merge, and keep both changes', async () => {
     await setup();
     const real = remote.fetch;
     let raced = false;
@@ -207,7 +207,7 @@ describe('E13–E15 robustness', () => {
     assert.ok(fake.store.collections.t);
   });
 
-  test('E14 offline: the error is recorded, local changes stay, and the next sync goes through', async () => {
+  test('SE14 offline: the error is recorded, local changes stay, and the next sync goes through', async () => {
     await setup();
     await putCollection({ ...mine, name: 'Offline edit' });
     remote.offline = true;
@@ -221,7 +221,7 @@ describe('E13–E15 robustness', () => {
     assert.equal((await send({ type: 'syncStatus' })).lastError, null);
   });
 
-  test('E15 encrypted: the server only sees ciphertext; Disconnect stops syncing and keeps the collections', async () => {
+  test('SE15 encrypted: the server only sees ciphertext; Disconnect stops syncing and keeps the collections', async () => {
     await setup({ passphrase: 'correct horse' });
     assert.ok(!remote.text.includes('Mine'));
     assert.equal((await remoteSnap('correct horse')).collections.m.name, 'Mine');

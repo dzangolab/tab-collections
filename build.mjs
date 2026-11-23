@@ -22,7 +22,9 @@ const base = {
   name: 'Tab Collections',
   version: pkg.version,
   description: 'Group web sites into collections and open each collection as its own window.',
-  permissions: ['storage', 'unlimitedStorage', 'tabs'],
+  permissions: ['alarms', 'storage', 'tabs', 'unlimitedStorage'],
+  // Sync: access to the one server the user sets up, asked for at setup (permissions.request).
+  optional_host_permissions: ['https://*/*'],
   action: { default_title: 'Tab Collections', default_popup: 'popup.html', default_icon: icons },
   icons,
   options_ui: { page: 'collections.html', open_in_tab: true },
@@ -47,7 +49,7 @@ const targets = {
   },
   safari: {
     ...base,
-    permissions: ['storage', 'tabs'],
+    permissions: ['alarms', 'storage', 'tabs'],
     background: { service_worker: 'background.js' },
   },
 };
