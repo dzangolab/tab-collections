@@ -280,7 +280,9 @@ $('delete').addEventListener('click', async () => {
 });
 
 $('exportOne').addEventListener('click', () => {
-  downloadJson(`${slug(draft.name)}.collection.json`, buildExport([dirty ? saved : draft]));
+  // With unsaved changes, the saved version, named after itself.
+  const col = dirty ? saved : draft;
+  downloadJson(`${slug(col.name)}.collection.json`, buildExport([col]));
   if (dirty) toast('Exported the last saved version');
 });
 
