@@ -1,4 +1,5 @@
-// Screenshots for the Chrome Web Store listing (1280×800), saved to store/screenshots/.
+// Screenshots (1280×800, saved to store/screenshots/) and promo tiles (440×280 and 1400×560, saved
+// to store/promo/) for the Chrome Web Store listing.
 // Run with `npm run screenshots`. Uses demo collections, never real data. The demo sites are
 // visited once first, so the browser has their favicons (without a network, pages show the globe).
 import { test, expect } from '../e2e/fixtures.js';
@@ -7,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../store/screenshots');
+const PROMO = path.resolve(OUT, '../promo');
 const SIZE = { width: 1280, height: 800 };
 const MIN = 60_000;
 
@@ -167,4 +169,39 @@ test('store screenshots', async ({ context, ext, worker }) => {
   });
   await sync.locator(':focus').evaluate((el) => el.blur()).catch(() => {});
   await shoot(sync, '5-sync.png');
+
+  // Promo tiles, in the extension's blue: the small tile (440×280) and the marquee (1400×560).
+  await mkdir(PROMO, { recursive: true });
+  const listPng = await readFile(path.join(OUT, '1-collections.png'));
+  const img = (png) => `data:image/png;base64,${png.toString('base64')}`;
+  const tile = async (name, size, body) => {
+    const p = await context.newPage();
+    await p.setViewportSize(size);
+    await p.setContent(`<!doctype html><html><body style="margin:0;width:${size.width}px;height:${size.height}px;overflow:hidden;
+      background:radial-gradient(circle at 20% 15%,#4d87ec 0,#2f6fde 45%,#1d4fae 100%);color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">${body}</body></html>`);
+    await p.screenshot({ path: path.join(PROMO, name) });
+  };
+  const logo = (px) => `<img src="${img(icon)}" width="${px}" height="${px}" alt=""
+    style="border-radius:${px * 0.22}px;box-shadow:0 0 0 ${Math.round(px / 24)}px rgba(255,255,255,.9),0 8px 24px rgba(0,0,0,.25)">`;
+
+  await tile('small-440x280.png', { width: 440, height: 280 }, `
+    <div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center">
+      ${logo(84)}
+      <div>
+        <div style="font-size:34px;font-weight:700;letter-spacing:-.01em">Tab Collections</div>
+        <div style="font-size:18px;opacity:.9;margin-top:6px">Your tabs, grouped and saved</div>
+      </div>
+    </div>`);
+
+  await tile('marquee-1400x560.png', { width: 1400, height: 560 }, `
+    <div style="position:absolute;left:96px;top:0;bottom:0;width:520px;display:flex;flex-direction:column;justify-content:center">
+      ${logo(88)}
+      <div style="font-size:60px;font-weight:700;letter-spacing:-.02em;margin-top:32px">Tab Collections</div>
+      <div style="font-size:26px;line-height:1.4;opacity:.92;margin-top:14px">Save groups of tabs as collections, open each one as its own window, and sync them through storage you own.</div>
+    </div>
+    <img src="${img(listPng)}" alt="" style="position:absolute;left:700px;top:70px;width:780px;border-radius:14px;
+      box-shadow:0 30px 70px rgba(0,0,0,.35)">
+    <img src="${img(popupPng)}" alt="" style="position:absolute;left:640px;top:150px;width:300px;border-radius:12px;background:#fff;
+      box-shadow:0 30px 70px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.2)">`);
 });
